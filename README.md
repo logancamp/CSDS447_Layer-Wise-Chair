@@ -8,8 +8,8 @@ CHAIR: https://github.com/eggachecat/CHAIR <br>
 LLAMA 1B: https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct <br>
 TinyLLAMA: https://huggingface.co/TinyLlama/TinyLlama-1.1B-Chat-v1.0 <br>
 <br>
-truthful qa<br>
-other stuff<br>
+TruthfulQA: https://github.com/sylinrl/TruthfulQA <br>
+MMLU: https://github.com/hendrycks/test?tab=readme-ov-file <br>
 
 <br>
 We'll probably want to set up docker or some more robust env setup<br>

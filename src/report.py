@@ -90,6 +90,45 @@ def main():
             "overlap_delta": delta_stats,
             "source": str(tagged_path)
         }, f, indent=2)
+        
+    # ---- Optional: print a few example predictions to console ----
+    import random
+    try:
+        # Use the original input file (args.preds). If it's chair_scored.jsonl,
+        # we will derive chair_pred from chair_score with a default threshold.
+        with open(args.preds, "r", encoding="utf-8") as f:
+            scored_rows = [json.loads(x) for x in f if x.strip()]
+
+        # If CHAIR scores exist but no chair_pred, create it with a 0.5 threshold.
+        thr = 0.5
+        for r in scored_rows:
+            if "chair_score" in r and "chair_pred" not in r:
+                r["chair_pred"] = int(r["chair_score"] >= thr)
+
+        # Pick examples that are predicted hallucinations (or labeled hallucinations if no CHAIR pred)
+        candidates = [r for r in scored_rows if r.get("chair_pred", r.get("hallucination", False))]
+
+        print("\n--- Sample detected hallucinations (console preview) ---")
+        if not candidates:
+            print("(none found)")
+        else:
+            for ex in random.sample(candidates, min(3, len(candidates))):
+                q = ex.get("question", "").replace("\n", " ")[:140]
+                pred_i = ex.get("pred_index", 0)
+                corr_i = ex.get("correct_index", 0)
+                pred = ex.get("choices", ["?"])[pred_i] if ex.get("choices") else ex.get("pred_text", "?")
+                gold = ex.get("choices", ["?"])[corr_i] if ex.get("choices") else ex.get("correct_text", "?")
+                line = [
+                    f"Q: {q}...",
+                    f"Pred: {pred}",
+                    f"Gold: {gold}",
+                ]
+                if "chair_score" in ex:
+                    line.append(f"CHAIR score: {ex['chair_score']:.2f}")
+                print(" | ".join(line))
+    except Exception as e:
+        print(f"(Could not print sample predictions: {e})")
+    
     print(f"Wrote:\n- {out_md}\n- {out_json}")
 
 if __name__ == "__main__":

@@ -24,7 +24,7 @@ Collect data as benchmarks (organize)<br>
 
 # BASH:
 ## 0) activate env
-conda activate chair-lite
+conda activate chair-lite <br>
 export TOKENIZERS_PARALLELISM=false
 
 <br>
@@ -35,8 +35,8 @@ export CHAIR_MODEL="TinyLlama/TinyLlama-1.1B-Chat-v1.0"   #ungated & fast
 <br>
 
 ## 2) evaluate LLM on MC1 and store logits/probs for CHAIR training (takes a long time)
-python src/eval_mc1.py --limit 500 --max_new_tokens 64 \
-  --outname train_run --store_token_probs --token_prob_cap 64 \
+python src/eval_mc1.py --limit 500 --max_new_tokens 64 \ <br>
+  --outname train_run --store_token_probs --token_prob_cap 64 \ <br>
   ${CHAIR_MODEL:+--model "$CHAIR_MODEL"}
 
 ## - tag responses as true/false & hallucination labels
@@ -51,8 +51,8 @@ python src/train_chair.py --features outputs/train_run.features.csv --out output
 <br>
 
 ## 3) collect a new MC1 sample for testing the CHAIR classifier (takes a long time)
-python src/eval_mc1.py --limit 200 --max_new_tokens 64 \
-  --outname eval_run --store_token_probs --token_prob_cap 64 \
+python src/eval_mc1.py --limit 200 --max_new_tokens 64 \ <br>
+  --outname eval_run --store_token_probs --token_prob_cap 64 \ <br>
   ${CHAIR_MODEL:+--model "$CHAIR_MODEL"}
 
 ## - apply trained CHAIR classifier to new eval set

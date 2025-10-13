@@ -1,5 +1,5 @@
 # CSDC447_Layer-Wise-Chair
-Course project experimenting with an expanded CHAIR concept for layer wise hallucination detection
+Course project experimenting with an expanded CHAIR concept for layer wise hallucination detection<br>
 <br>
 We'll probably want to set up docker or some more robust env setup<br>
 We need to expand the model to take layer history<br>

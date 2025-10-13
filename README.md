@@ -56,15 +56,15 @@ Writes: outputs/eval_llama3.chair_scored.jsonl (adds chair_score ∈ [0,1])
 
 ### Report and aggregate
 ##### BASH:
-# Per-run human report
+// Per-run human report
 python src/report.py --preds outputs/eval_llama3.chair_scored.jsonl
-# Multi-run table (reads *.metrics.json)
+// Multi-run table (reads *.metrics.json)
 python src/aggregate.py
 
 Writes: outputs/eval_llama3.chair_scored.tagged.report.md and .report.metrics.json; aggregation prints to stdout
 
 
-##Makefile shortcuts (optional):
+###Makefile shortcuts (optional):
 ##### BASH:
 make chair_collect_train
 make chair_train

@@ -1,6 +1,16 @@
 # CSDC447_Layer-Wise-Chair
 Course project experimenting with an expanded CHAIR concept for layer wise hallucination detection<br>
 <br>
+
+CHAIR: https://github.com/eggachecat/CHAIR <br>
+<br>
+LLAMA 1B: https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct <br>
+TinyLLAMA: https://huggingface.co/TinyLlama/TinyLlama-1.1B-Chat-v1.0 <br>
+<br>
+truthful qa<br>
+other stuff<br>
+
+<br>
 We'll probably want to set up docker or some more robust env setup<br>
 We need to expand the model to take layer history<br>
 We need to up the accuracy<br>

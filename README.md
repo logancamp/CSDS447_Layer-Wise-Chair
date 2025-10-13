@@ -5,6 +5,7 @@ Lower Chair Score = Higher Predicted Chance of Hallucination<br>
 
 CHAIR: https://github.com/eggachecat/CHAIR <br>
 <br>
+LLAMA 8B: https://huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct <br>
 LLAMA 1B: https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct <br>
 TinyLLAMA: https://huggingface.co/TinyLlama/TinyLlama-1.1B-Chat-v1.0 <br>
 <br>

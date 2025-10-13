@@ -1,14 +1,14 @@
 # CSDC447_Layer-Wise-Chair
 Course project experimenting with an expanded CHAIR concept for layer wise hallucination detection
 <br>
-We'll probably want to set up docker or some more robust env setup
-We need to expand the model to take layer history
-We need to up the accuracy
-We need aneasier way to run this, maybe a main file of some kind
-We need to link other papers and datasets in here
-We need to add comments and make it more readable
-Reduce output files maybe or label them better even if just in here
-Collect data as benchmarks (organize)
+We'll probably want to set up docker or some more robust env setup<br>
+We need to expand the model to take layer history<br>
+We need to up the accuracy<br>
+We need aneasier way to run this, maybe a main file of some kind<br>
+We need to link other papers and datasets in here<br>
+We need to add comments and make it more readable<br>
+Reduce output files maybe or label them better even if just in here<br>
+Collect data as benchmarks (organize)<br>
 <br>
 # BASH:
 ## 0) activate env

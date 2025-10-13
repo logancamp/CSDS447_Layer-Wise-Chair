@@ -21,14 +21,17 @@ We need to add comments and make it more readable<br>
 Reduce output files maybe or label them better even if just in here<br>
 Collect data as benchmarks (organize)<br>
 <br>
+
 # BASH:
 ## 0) activate env
 conda activate chair-lite
 export TOKENIZERS_PARALLELISM=false
 <br>
+
 ## 1) choose a model once for this session:
-export CHAIR_MODEL="TinyLlama/TinyLlama-1.1B-Chat-v1.0"   # ungated & fast
+export CHAIR_MODEL="TinyLlama/TinyLlama-1.1B-Chat-v1.0"   #ungated & fast
 <br>
+
 ## 2) evaluate LLM on MC1 and store logits/probs for CHAIR training (takes a long time)
 python src/eval_mc1.py --limit 500 --max_new_tokens 64 \
   --outname train_run --store_token_probs --token_prob_cap 64 \

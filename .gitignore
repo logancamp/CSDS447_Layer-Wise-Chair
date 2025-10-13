@@ -1,0 +1,12 @@
+# .gitignore
+__pycache__/
+*.pyc
+*.pkl
+*.csv
+*.jsonl
+*.metrics.json
+*.tagged.*
+*.chair_scored.*
+outputs/
+.env
+.DS_Store

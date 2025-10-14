@@ -23,9 +23,25 @@ Reduce output files maybe or label them better even if just in here<br>
 Collect data as benchmarks (organize)<br>
 <br>
 
+<br>
+
+<br>
+
+
 # BASH:
 ## 0) activate env
 conda activate chair-lite 
+
+or you could construct a singularity container
+
+by using the following command
+
+sudo singularity build singularity.sif container.def
+
+then you can activate it and use it in a shell by: 
+
+singularity shell --nv singularity.sif
+
 <br>
 export TOKENIZERS_PARALLELISM=false
 

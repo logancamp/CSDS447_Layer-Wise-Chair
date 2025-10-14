@@ -1,0 +1,14 @@
+Bootstrap: docker
+# Use the same NVIDIA base image
+From: nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu22.04
+
+%post
+    apt-get update && apt-get install -y python3 python3-pip
+    pip install --no-cache-dir -r /app/requirements.txt
+
+%files
+    ./requirements.txt /app/
+    ./my_llm_app.py /app/
+
+%runscript
+    exec python3 /app/my_llm_app.py "$@"

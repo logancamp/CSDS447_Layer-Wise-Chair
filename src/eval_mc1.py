@@ -34,7 +34,7 @@ def pick_by_overlap(cands, gen_text):
 def main():
     # Add command-line args
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", default="HuggingFaceTB/SmolLM2-135M-Instruct")
+    ap.add_argument("--model", default="TinyLlama/TinyLlama-1.1B-Chat-v1.0")
     ap.add_argument("--split", default="validation")
     ap.add_argument("--limit", type=int, default=100)
     ap.add_argument("--max_new_tokens", type=int, default=64)

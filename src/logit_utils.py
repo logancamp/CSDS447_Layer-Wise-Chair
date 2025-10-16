@@ -17,9 +17,7 @@ def scores_to_token_logprobs(scores, gen_token_ids):
     return logps
 
 def summarize_logprobs(logps):
-    """
-    Returns compact scalar stats for a sequence of per-token log-probs.
-    """
+    #Returns compact scalar stats for a sequence of per-token log-probs.
     if not logps:
         return {"avg_logprob": 0.0, "avg_prob": 0.0, "perplexity": float("inf")}
     avg_lp = sum(logps) / len(logps)

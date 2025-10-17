@@ -17,7 +17,7 @@ train_model:
 	python src/train_chair.py --features outputs/train_run.features.csv --out outputs/chair_clf.pkl
 
 collect_test_data:
-	python src/eval_mc1.py --split test --limit 200 --max_new_tokens 64 \
+	python src/eval_mc1.py --split validation --limit 200 --max_new_tokens 64 \
 	  --outname eval_run --store_token_probs --token_prob_cap 64 \
 	  ${CHAIR_MODEL:+--model "$CHAIR_MODEL"}
 

@@ -4,8 +4,11 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
-from sklearn.metrics import roc_auc_score, average_precision_score, classification_report
-import json
+from sklearn.metrics import (
+    roc_auc_score, average_precision_score, accuracy_score,
+    precision_recall_fscore_support, confusion_matrix, classification_report
+)
+import json, time
 
 """
 SUMMARY:
@@ -38,21 +41,50 @@ def main():
     # Fit and evaluate
     pipe.fit(Xtr, ytr)
     proba = pipe.predict_proba(Xte)[:,1]
-    auc = roc_auc_score(yte, proba)
-    ap = average_precision_score(yte, proba)
-    
-    # AUC = area under ROC curve, AP = average precision (area under precision-recall curve)
-    print(f"AUC={auc:.3f} | AP={ap:.3f}")
-    # return precision, recall, f1 for each class
-    print(classification_report(yte, (proba>=0.5).astype(int), digits=3))
 
-    # Save the trained model
+    # Define threshold and predictions
+    thr = 0.5
+    yhat = (proba >= thr).astype(int)
+
+    # Compute metrics
+    auc = roc_auc_score(yte, proba)
+    ap  = average_precision_score(yte, proba)
+    acc = accuracy_score(yte, yhat)
+    prec, rec, f1, _ = precision_recall_fscore_support(yte, yhat, average="binary", zero_division=0)
+    cm = confusion_matrix(yte, yhat).tolist()
+
+    print(f"AUC={auc:.3f} | AP={ap:.3f} | ACC={acc:.3f} | F1={f1:.3f}")
+    print(classification_report(yte, yhat, digits=3))
+
+    # Build metrics dict for saving
+    metrics = {
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "n_train": int(len(ytr)),
+        "n_test": int(len(yte)),
+        "threshold": thr,
+        "auc_roc": float(auc),
+        "avg_precision": float(ap),
+        "accuracy": float(acc),
+        "precision": float(prec),
+        "recall": float(rec),
+        "f1": float(f1),
+        "confusion_matrix": cm,
+    }
+
+    # Save model + metrics
     joblib.dump(pipe, args.out)
-    print(f"Saved: {args.out}")
-    
-    # Save metrics to a json file
-    with open("outputs/chair_metrics.json", "w") as f:
-        json.dump({"AUC": auc, "AP": ap}, f, indent=2)
+    print(f"Saved model: {args.out}")
+
+    metrics_path = args.out.replace(".pkl", ".metrics.json")
+    with open(metrics_path, "w") as f:
+        json.dump(metrics, f, indent=2)
+    print(f"Saved metrics: {metrics_path}")
+
+    # Save next to the model
+    metrics_path = args.out.replace(".pkl", ".metrics.json")
+    with open(metrics_path, "w") as f:
+        json.dump(metrics, f, indent=2)
+    print(f"Saved metrics: {metrics_path}")
 
 if __name__ == "__main__":
     main()

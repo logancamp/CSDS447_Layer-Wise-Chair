@@ -3,7 +3,7 @@ from pathlib import Path
 
 """ 
 SUMMARY: 
-Post Processing: Tag multiple-choice eval outputs with overlap features and write CSV. 
+Post Processing for eval: Tag multiple-choice eval outputs with overlap features and write CSV. 
 Requires outputs from eval_mc1.py.
 
 For human analysis of baselines pre-chair training.

@@ -1,4 +1,3 @@
-import math
 import argparse, json, time
 from pathlib import Path
 from datasets import load_dataset # type: ignore

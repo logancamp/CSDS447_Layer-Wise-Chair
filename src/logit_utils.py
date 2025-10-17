@@ -1,4 +1,3 @@
-# src/logit_utils.py
 import torch
 import math
 
@@ -27,7 +26,6 @@ def summarize_logprobs(logps):
 
 def step_entropy(logits_row):
     # logits_row: 1D tensor [vocab]; returns H(p) = -sum p log p
-    import torch
     logp = torch.log_softmax(logits_row, dim=-1)
     p = torch.exp(logp)
     return float(-(p * logp).sum().item())

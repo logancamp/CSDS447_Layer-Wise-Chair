@@ -5,6 +5,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import roc_auc_score, average_precision_score, classification_report
+import json
 
 """
 SUMMARY:
@@ -48,6 +49,10 @@ def main():
     # Save the trained model
     joblib.dump(pipe, args.out)
     print(f"Saved: {args.out}")
+    
+    # Save metrics to a json file
+    with open("outputs/chair_metrics.json", "w") as f:
+        json.dump({"AUC": auc, "AP": ap}, f, indent=2)
 
 if __name__ == "__main__":
     main()

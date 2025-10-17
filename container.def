@@ -8,7 +8,6 @@ From: nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu22.04
 
 %files
     ./requirements.txt /app/
-    ./my_llm_app.py /app/
 
 %runscript
-    exec python3 /app/my_llm_app.py "$@"
+    

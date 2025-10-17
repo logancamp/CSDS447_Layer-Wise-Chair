@@ -1,12 +1,9 @@
 import argparse, json, time
-import argparse, json, time
 from pathlib import Path
 from datasets import load_dataset # type: ignore
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
-from logit_utils import scores_to_token_logprobs, summarize_logprobs
-
-from logit_utils import scores_to_entropies
+from logit_utils import scores_to_token_logprobs, summarize_logprobs, scores_to_entropies
 from typing import cast
 from transformers.generation.utils import GenerateDecoderOnlyOutput
 
@@ -54,6 +51,8 @@ def pick_by_loglikelihood(mdl, tok, question, choices, device):
 def main():
     # Add command-line args
     ap = argparse.ArgumentParser()
+    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--offset", type=int, default=0)
     ap.add_argument("--model", default="TinyLlama/TinyLlama-1.1B-Chat-v1.0")
     ap.add_argument("--split", default="validation")
     ap.add_argument("--limit", type=int, default=100)
@@ -87,22 +86,28 @@ def main():
     #switch to cpu if CUDA is not available
     device = "cuda" if use_cuda else "cpu"
 
-   #switch to cpu if CUDA is not avalible
-    device = "cuda" if use_cuda else "cpu"
-
     # Load model and tokenizer
     tok = AutoTokenizer.from_pretrained(args.model)
+    
+    # Ensure pad token exists (fixes a bug with some models)
+    if tok.pad_token is None:
+        tok.pad_token = tok.eos_token
+    
     mdl = AutoModelForCausalLM.from_pretrained(
         args.model,
-        device_map = device,
+        device_map = "auto" if use_cuda else None,
         torch_dtype = torch.float16 if use_cuda else None,
     )
+    mdl.to(device)
     
     # Switch model to eval mode
     mdl.eval()
 
-    # Load the dataset
-    ds = load_dataset("truthful_qa","multiple_choice")[args.split] # load and split data for eval [train, validation, test]
+    # Load the dataset (split, shuffled, sliced)
+    ds = load_dataset("truthful_qa","multiple_choice")[args.split].shuffle(seed=args.seed)
+    start = max(0, args.offset)
+    end = start + args.limit if args.limit else len(ds)
+    ds = ds.select(range(start, min(end, len(ds))))
     
     """ Each example in the dataset looks like this:
     {
@@ -113,21 +118,16 @@ def main():
         }
     }
     """
-    
-    # limit the dataset num of examples depending on args.limit
-    if args.limit and args.limit < len(ds): 
-        ds = ds.select(range(args.limit))
-
 
     total = len(ds); correct = 0
     with open(pred_path, "w", encoding="utf-8") as f:
-        for ex in ds:
+        for i, ex in enumerate(ds):
             
             # Prepare the prompt
             q = ex["question"]
             prompt = f"{SYS}\nQ: {q}\nA:"
             inputs = tok(prompt, return_tensors="pt")
-            if use_cuda: inputs = {k: v.cuda() for k, v in inputs.items()} # move to gpu if available
+            inputs = {k: v.to(device) for k,v in inputs.items()} if use_cuda else inputs # move to gpu if available
             
             # Generate output
             with torch.inference_mode():
@@ -163,15 +163,23 @@ def main():
             ent = summarize_seq(entropies) # summarize all possible tokens
             lp = summarize_seq(token_logps) # summarize only generated tokens
 
-            # Pick an answer based on overlap and check if it's correct
+            # Pick an answer based on log-likeihood and check if it's correct
             choices = ex["mc1_targets"]["choices"]
             labels = ex["mc1_targets"]["labels"]
             guess = pick_by_loglikelihood(mdl, tok, q, choices, device)
             is_correct = (labels[guess] == 1)
             correct += int(is_correct)
+            
+            qid = ex.get("id", None)
+            if qid is None:
+                # fallback: index within the (shuffled, sliced) dataset
+                qid = f"{args.split}:{start + i}"  # n = 0,1,2... as you iterate
 
             # Store the results for jsonl
             rec = {
+                "qid": qid,
+                "split": args.split,
+                "model_name": args.model,
                 "question": q,
                 "choices": choices,
                 "labels": labels,
@@ -183,13 +191,20 @@ def main():
                 "avg_logprob": conf["avg_logprob"],
                 "avg_prob": conf["avg_prob"],
                 "perplexity": conf["perplexity"],
-                "avg_logprob": conf["avg_logprob"],
-                "avg_prob": conf["avg_prob"],
-                "perplexity": conf["perplexity"],
-                "lp_mean": lp["mean"], "lp_std": lp["std"], "lp_min": lp["min"], "lp_max": lp["max"],
-                "lp_first": lp["first"], "lp_last": lp["last"], "lp_delta": lp["delta"],
-                "ent_mean": ent["mean"], "ent_std": ent["std"], "ent_min": ent["min"], "ent_max": ent["max"],
-                "ent_first": ent["first"], "ent_last": ent["last"], "ent_delta": ent["delta"],
+                "lp_mean": lp["mean"], 
+                "lp_std": lp["std"], 
+                "lp_min": lp["min"], 
+                "lp_max": lp["max"],
+                "lp_first": lp["first"], 
+                "lp_last": lp["last"], 
+                "lp_delta": lp["delta"],
+                "ent_mean": ent["mean"], 
+                "ent_std": ent["std"], 
+                "ent_min": ent["min"], 
+                "ent_max": ent["max"],
+                "ent_first": ent["first"], 
+                "ent_last": ent["last"], 
+                "ent_delta": ent["delta"],
             }
 
             # Store token-level info if requested for last layer

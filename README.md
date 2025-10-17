@@ -1,86 +1,55 @@
 # CSDS447_Layer-Wise-Chair
 Course project experimenting with an expanded CHAIR concept for layer wise hallucination detection<br>
-Lower Chair Score = Higher Predicted Chance of Hallucination<br>
 <br>
 
+## Models and Datasets:
 CHAIR: https://github.com/eggachecat/CHAIR <br>
 <br>
 LLAMA 8B: https://huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct <br>
 LLAMA 1B: https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct <br>
-TinyLLAMA: https://huggingface.co/TinyLlama/TinyLlama-1.1B-Chat-v1.0 <br>
+TinyLLAMA (current): https://huggingface.co/TinyLlama/TinyLlama-1.1B-Chat-v1.0 <br>
 <br>
 TruthfulQA: https://github.com/sylinrl/TruthfulQA <br>
 MMLU: https://github.com/hendrycks/test?tab=readme-ov-file <br>
 
+## Baseline + Methodology
+Our benchmarks are the last layer detection outputs. Later (depending on resources) these will be upgraded to include layer history. We detect these by comparing TruthfulQA multiple choice responses with generated outputs. Currently this is a log-likelihood function the same as TruthfulQA.
+
+## Goal:
+Are we able to detect these hallucinations earlier rather than only in the last layer as CHAIR and other detection methods employ?
+
+## Architecture:
+- 80:20 split training/test data
+- Training data consists of last layer summary stats + token logprobs
+- Simple logistic regression currently <br><br>
+- Later we will upgrade the model to an Attention + Feedforward network like CHAIR with a more robust model from above and include layer summaries for better baselines.
+- After we will adjust our dataset to include partially completed layer data - or train per layer to learn internal patterns. If time and space allow we will try to do most or all layers, otherwise only the last 5-10. <br>
+- Lastly we will attempt classification at each layer to track hallucinations throughout the process of generation for better explainability for LLM hallucination early detection.
 <br>
-We'll probably want to set up docker or some more robust env setup<br>
-We need to expand the model to take layer history<br>
-We need to up the accuracy<br>
-We need aneasier way to run this, maybe a main file of some kind<br>
-We need to link other papers and datasets in here<br>
-We need to add comments and make it more readable<br>
-Reduce output files maybe or label them better even if just in here<br>
-Collect data as benchmarks (organize)<br>
-<br>
 
-<br>
-
-<br>
-
-
-# BASH:
-## 0) activate env
-conda activate chair-lite 
-
-or you could construct a singularity container
-
-by using the following command
-
+# Get Started (BASH):
+## 0) Setup Dependencies
 sudo singularity build singularity.sif container.def
 
-then you can activate it and use it in a shell by: 
+## 1) Activate + Setup Environment
+singularity shell --nv singularity.sif <br>
+makefile setup <br>
 
-singularity shell --nv singularity.sif
+## 2) Run the full data collection + training + prediction:
+makefile full_run <br><br>
 
-<br>
-export TOKENIZERS_PARALLELISM=false
+# Step-by-step Run (BASH):
+## 1) Collect training data through TruthfulQA:
+makefile collect_train_data <br>
 
-<br>
+## 2) Tag the train data - human readible:
+makefile tag_train_data <br>
 
-## 1) choose a model once for this session:
-export CHAIR_MODEL="TinyLlama/TinyLlama-1.1B-Chat-v1.0"   #ungated & fast
+## 3) Featurize the train data - numeric:
+makefile featurize_train_data <br>
 
-<br>
+## 4) Collect testing data through TruthfulQA:
+makefile collect_test_data <br>
 
-## 2) evaluate LLM on MC1 and store logits/probs for CHAIR training (takes a long time)
-python src/eval_mc1.py --limit 500 --max_new_tokens 64 \
-  --outname train_run --store_token_probs --token_prob_cap 64 \
-  ${CHAIR_MODEL:+--model "$CHAIR_MODEL"}
-
-## - tag responses as true/false & hallucination labels
-python src/tag_mc1.py   --preds outputs/train_run.jsonl
-
-## - convert tagged outputs into numerical feature vectors
-python src/featurize.py --preds outputs/train_run.jsonl --K 32
-
-## - train the CHAIR logistic-regression classifier
-python src/train_chair.py --features outputs/train_run.features.csv --out outputs/chair_clf.pkl
-
-<br>
-
-## 3) collect a new MC1 sample for testing the CHAIR classifier (takes a long time)
-python src/eval_mc1.py --limit 200 --max_new_tokens 64 \
-  --outname eval_run --store_token_probs --token_prob_cap 64 \
-  ${CHAIR_MODEL:+--model "$CHAIR_MODEL"}
-
-## - apply trained CHAIR classifier to new eval set
-python src/predict_chair.py --model_pkl outputs/chair_clf.pkl --preds outputs/eval_run.jsonl
-
-## - generate markdown + CSV report of CHAIR predictions
-python src/report.py       --preds outputs/eval_run.chair_scored.jsonl
-
-### - aggregate all metrics across previous runs for comparison
-python src/aggregate.py
-
-
-
+## 5) Run chair-lite prediction from trained model:
+makefile predict_test_data

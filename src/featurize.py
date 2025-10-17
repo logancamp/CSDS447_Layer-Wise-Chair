@@ -1,16 +1,27 @@
-# src/featurize.py
 import argparse, json, csv
 from pathlib import Path
 
+"""
+SUMMARY:
+Post Processing: Tags multiple-choice evaluation outputs with lexical overlap
+and hallucination indicators, then writes enriched JSONL and CSV files.
+Requires outputs from eval_mc1.py.
+
+Used by train_chair for classifier training and analysis.
+"""
+
+# Normalize and pad/truncate the last layer tokens
 def pad_tail(xs, k, pad=0.0):
-    xs = list(xs)[-k:]  # last K
+    xs = list(xs)[-k:]
     if len(xs) < k: xs = [pad]*(k-len(xs)) + xs
     return xs
 
+# Extract features from a single record (default K=32 tokens)
 def row_from_record(r, K=32):
     # Label: 1 = hallucination (wrong), 0 = correct
     y = int(r.get("hallucination", not r.get("correct", False)))
-    # Scalar summaries
+    
+    # Scalar summaries from eval_mc1
     scalars = {
         "avg_logprob": r.get("avg_logprob", 0.0),
         "avg_prob": r.get("avg_prob", 0.0),
@@ -35,15 +46,18 @@ def row_from_record(r, K=32):
     return y, scalars, seq
 
 def main():
+    # Add command-line args
     ap = argparse.ArgumentParser()
     ap.add_argument("--preds", required=True, help="outputs/*.jsonl from eval_mc1")
     ap.add_argument("--out", default="", help="out CSV path")
     ap.add_argument("--K", type=int, default=32, help="tail length for token logprob sequence")
     args = ap.parse_args()
 
+    # Set up paths
     src = Path(args.preds)
     out = Path(args.out) if args.out else src.with_suffix(".features.csv")
 
+    # Read input, extract features, write CSV
     with open(src, "r", encoding="utf-8") as f_in, open(out, "w", newline="", encoding="utf-8") as f_out:
         rows = []
         for line in f_in:
@@ -52,7 +66,6 @@ def main():
             y, scalars, seq = row_from_record(r, args.K)
             row = {"y": y, **scalars}
             row.update({f"lp_t{-i}": v for i, v in enumerate(range(args.K,0,-1), start=1)})  # headers only
-            # We'll write final dicts in a simpler way:
             rows.append((y, scalars, seq))
 
         # Build header properly

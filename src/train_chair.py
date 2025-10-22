@@ -3,12 +3,14 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
+from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import (
     roc_auc_score, average_precision_score, accuracy_score,
     precision_recall_fscore_support, confusion_matrix, classification_report
 )
 import json, time
+import numpy as np
 
 """
 SUMMARY:
@@ -25,7 +27,8 @@ def main():
 
     # Load features
     df = pd.read_csv(args.features)
-    y = df["y"].values
+    df = df.replace([np.inf, -np.inf], np.nan)  # new line: replace infinities
+    y = df["y"].astype(int).values
     X = df.drop(columns=["y"]).values
 
     # Train/test split: 80/20 split, stratified to preserves class balance in both sets
@@ -34,7 +37,8 @@ def main():
     # Train logistic regression with standard scaling
     # TODO: expand to an attention-based model like in the paper
     pipe = Pipeline([
-        ("scaler", StandardScaler(with_mean=True, with_std=True)), # center and scale features with z-score
+        ("imputer", SimpleImputer(strategy="median")),  # new step
+        ("scaler", StandardScaler(with_mean=True, with_std=True)),
         ("clf", LogisticRegression(max_iter=200, class_weight="balanced"))
     ])
     
@@ -71,16 +75,11 @@ def main():
         "confusion_matrix": cm,
     }
 
-    # Save model + metrics
+    # Save model
     joblib.dump(pipe, args.out)
     print(f"Saved model: {args.out}")
 
-    metrics_path = args.out.replace(".pkl", ".metrics.json")
-    with open(metrics_path, "w") as f:
-        json.dump(metrics, f, indent=2)
-    print(f"Saved metrics: {metrics_path}")
-
-    # Save next to the model
+    # Save metrics for the model
     metrics_path = args.out.replace(".pkl", ".metrics.json")
     with open(metrics_path, "w") as f:
         json.dump(metrics, f, indent=2)

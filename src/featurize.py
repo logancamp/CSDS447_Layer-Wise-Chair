@@ -10,6 +10,13 @@ Requires outputs from eval_mc1.py.
 Used by train_chair for classifier training and analysis.
 """
 
+def fetch_args():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--preds", required=True, help="outputs/*.jsonl from eval_mc1")
+    ap.add_argument("--out", default="", help="out CSV path")
+    ap.add_argument("--K", type=int, default=32, help="tail length for token logprob sequence")
+    return ap.parse_args()
+    
 # Normalize and pad/truncate the last layer tokens
 def pad_tail(xs, k, pad=0.0):
     xs = list(xs)[-k:]
@@ -22,60 +29,67 @@ def row_from_record(r, K=32):
     y = int(r.get("hallucination", not r.get("correct", False)))
     
     # Scalar summaries from eval_mc1
-    scalars = {
-        "avg_logprob": r.get("avg_logprob", 0.0),
-        "avg_prob": r.get("avg_prob", 0.0),
-        "perplexity": r.get("perplexity", 0.0),
-        "lp_mean": r.get("lp_mean", 0.0),
-        "lp_std": r.get("lp_std", 0.0),
-        "lp_min": r.get("lp_min", 0.0),
-        "lp_max": r.get("lp_max", 0.0),
-        "lp_first": r.get("lp_first", 0.0),
-        "lp_last": r.get("lp_last", 0.0),
-        "lp_delta": r.get("lp_delta", 0.0),
-        "ent_mean": r.get("ent_mean", 0.0),
-        "ent_std": r.get("ent_std", 0.0),
-        "ent_min": r.get("ent_min", 0.0),
-        "ent_max": r.get("ent_max", 0.0),
-        "ent_first": r.get("ent_first", 0.0),
-        "ent_last": r.get("ent_last", 0.0),
-        "ent_delta": r.get("ent_delta", 0.0),
-    }
-    seq = r.get("token_logprobs", [])
-    seq = pad_tail(seq, K, 0.0)
-    return y, scalars, seq
+    feats = {}
+    hist = sorted(r.get("historical_layers", []), key=lambda d: d.get("layer", 0))
+    for item in hist:
+        L = item.get("layer")
+        lp = item.get("lp_summary", {})
+        en = item.get("ent_summary", {})
+        # Separate features for logprobs and entropies
+        for k, v in lp.items():
+            feats[f"layer{L}_lp_{k}"] = float(v)
+        for k, v in en.items():
+            feats[f"layer{L}_ent_{k}"] = float(v)
+    
+    # Last layer token sequences (padded/truncated to K)
+    last = r.get("last_layer", {})
+    lp_seq  = pad_tail(last.get("logprobs_seq", []), K, 0.0)
+    ent_seq = pad_tail(last.get("entropies_seq", []), K, 0.0)
+    
+    # For logistic model
+    for i, v in enumerate(lp_seq, 1):
+        feats[f"last_lp_tail_{i}"] = float(v)
+    for i, v in enumerate(ent_seq, 1):
+        feats[f"last_ent_tail_{i}"] = float(v)
+    
+    # For when we change to the attention model
+    # feats["last_lp_tail_vec"]  = list(lp_seq)
+    # feats["last_ent_tail_vec"] = list(ent_seq)
+        
+    return y, feats
 
 def main():
-    # Add command-line args
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--preds", required=True, help="outputs/*.jsonl from eval_mc1")
-    ap.add_argument("--out", default="", help="out CSV path")
-    ap.add_argument("--K", type=int, default=32, help="tail length for token logprob sequence")
-    args = ap.parse_args()
+    args = fetch_args()
 
     # Set up paths
     src = Path(args.preds)
     out = Path(args.out) if args.out else src.with_suffix(".features.csv")
 
     # Read input, extract features, write CSV
-    with open(src, "r", encoding="utf-8") as f_in, open(out, "w", newline="", encoding="utf-8") as f_out:
-        rows = []
+    rows = []
+    all_keys = set()
+
+    with open(src, "r", encoding="utf-8") as f_in:
         for line in f_in:
-            if not line.strip(): continue
+            line = line.strip()
+            if not line: 
+                continue
             r = json.loads(line)
-            y, scalars, seq = row_from_record(r, args.K)
-            row = {"y": y, **scalars}
-            row.update({f"lp_t{-i}": v for i, v in enumerate(range(args.K,0,-1), start=1)})  # headers only
-            rows.append((y, scalars, seq))
+            y, feats = row_from_record(r, args.K)
+            rows.append((y, feats))
+            all_keys |= feats.keys()
 
-        # Build header properly
-        header = ["y"] + list(rows[0][1].keys()) + [f"lp_tail_{i}" for i in range(1, args.K+1)]
+    if not rows:
+        raise SystemExit("No rows parsed from input.")
+
+    feat_keys = sorted(all_keys)
+    with open(out, "w", newline="", encoding="utf-8") as f_out:
         w = csv.writer(f_out)
-        w.writerow(header)
-        for y, scalars, seq in rows:
-            w.writerow([y] + list(scalars.values()) + seq)
+        w.writerow(["y"] + feat_keys)
+        for y, feats in rows:
+            w.writerow([y] + [feats.get(k, float("nan")) for k in feat_keys])
 
-    print(f"Wrote features: {out}")
+    print(f"Wrote features for training: {out}")
 
 if __name__ == "__main__":
     main()

@@ -3,9 +3,10 @@ from pathlib import Path
 from datasets import load_dataset # type: ignore
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
-from logit_utils import scores_to_token_logprobs, summarize_logprobs, scores_to_entropies
+from logit_utils import summarize_logprobs, summarize_entropies, hidden_to_token_logprobs, hidden_to_entropies
 from typing import cast
 from transformers.generation.utils import GenerateDecoderOnlyOutput
+import torch.nn.functional as F
 
 """
 SUMMARY:
@@ -15,16 +16,31 @@ Stores raw results in a JSONL file, one entry per question, with various confide
 Later this data is tagged by tag_mc1 for training and pre-processed in predict_chair.
 """
 
-
 # System prompt to use for all questions
 SYS = "You are concise and truthful. Answer the question factually and directly."
+
+def fetch_args():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--outname", default="", 
+        help="Optional base name for output files")
+    ap.add_argument("--store_token_probs", action="store_true",
+        help="Store per-token log-probs (truncated) and generated token ids")
+    ap.add_argument("--token_prob_cap", type=int, default=32,
+        help="Max number of token log-probs to store per example")
+    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--offset", type=int, default=0)
+    ap.add_argument("--model", default="TinyLlama/TinyLlama-1.1B-Chat-v1.0")
+    ap.add_argument("--split", default="validation")
+    ap.add_argument("--limit", type=int, default=100)
+    ap.add_argument("--max_new_tokens", type=int, default=64)
+    ap.add_argument("--outdir", default="outputs")
+    return ap.parse_args()
 
 # Return the index of the candidate with the highest log-likelihood: Same as TruthfulQA
 def pick_by_loglikelihood(mdl, tok, question, choices, device):
     prompt_txt = f"{SYS}\nQ: {question}\nA: "
     prompt = tok(prompt_txt, return_tensors="pt")
     prompt_len = prompt["input_ids"].shape[1]
-
 
     scores = []
     for c in choices:
@@ -35,7 +51,6 @@ def pick_by_loglikelihood(mdl, tok, question, choices, device):
         if attn_mask is not None:
             attn_mask = attn_mask.to(device)
 
-
         # Mask the prompt tokens so loss is only computed for choice
         labels = input_ids.clone()
         labels[:, :prompt_len] = -100  # without prompt
@@ -44,29 +59,10 @@ def pick_by_loglikelihood(mdl, tok, question, choices, device):
             num_labeled = (labels != -100).sum().item()
             loglik = -out.loss.item() * max(1, num_labeled)
         scores.append(loglik)
-
-
     return int(torch.tensor(scores).argmax().item())
 
 def main():
-    # Add command-line args
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--offset", type=int, default=0)
-    ap.add_argument("--model", default="TinyLlama/TinyLlama-1.1B-Chat-v1.0")
-    ap.add_argument("--split", default="validation")
-    ap.add_argument("--limit", type=int, default=100)
-    ap.add_argument("--max_new_tokens", type=int, default=64)
-    ap.add_argument("--outdir", default="outputs")
-    ap.add_argument("--outname", default="", 
-                    help="Optional base name for output files")
-    ap.add_argument("--store_token_probs", action="store_true",
-                    help="Store per-token log-probs (truncated) and generated token ids")
-    ap.add_argument("--token_prob_cap", type=int, default=32,
-                    help="Max number of token log-probs to store per example")
-    
-    # Parse the args
-    args = ap.parse_args()
+    args = fetch_args()
 
     # Set up output paths
     outdir = Path(args.outdir)
@@ -74,16 +70,14 @@ def main():
 
     stamp = time.strftime("%Y%m%d-%H%M%S")
     run_id = f"mc1_{Path(args.model).name}_{stamp}_n{args.limit}" # default run id
-    if args.outname: # Override run_id if outname is given
+    if args.outname: # override run_id if an outname is given
         run_id = args.outname
-        
+    
     pred_path = outdir / f"{run_id}.jsonl"
     met_path = outdir / f"{run_id}.metrics.json"
     
-    # Check if cuda is available
+    # Check if cuda is available for device
     use_cuda = torch.cuda.is_available()
-    
-    #switch to cpu if CUDA is not available
     device = "cuda" if use_cuda else "cpu"
 
     # Load model and tokenizer
@@ -93,15 +87,14 @@ def main():
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
     
+    # Load the LLM model
     mdl = AutoModelForCausalLM.from_pretrained(
         args.model,
         device_map = "auto" if use_cuda else None,
         torch_dtype = torch.float16 if use_cuda else None,
     )
     mdl.to(device)
-    
-    # Switch model to eval mode
-    mdl.eval()
+    mdl.eval() # Switch model to eval mode
 
     # Load the dataset (split, shuffled, sliced)
     ds = load_dataset("truthful_qa","multiple_choice")[args.split].shuffle(seed=args.seed)
@@ -135,33 +128,43 @@ def main():
                     **inputs,
                     max_new_tokens=args.max_new_tokens,
                     do_sample=False, # deterministic for clean logits - greedy decoding
-                    output_scores=True, # gives access to per-token scores
+                    output_hidden_states=True, # get hidden states for entropies and logprobs
                     return_dict_in_generate=True # return a ModelOutput instead of just sequences
                 )
             
-            # Extract entropies
+            # Process output
             out = cast(GenerateDecoderOnlyOutput, out)
-            entropies = scores_to_entropies(out.scores)
-            
-            # Compute how many tokens belong to the prompt
             prompt_len = inputs["input_ids"].shape[1]
-            gen_ids = out.sequences[0][prompt_len:]  # continuation token ids
-            gen_text = tok.decode(gen_ids, skip_special_tokens=True)
+            gen_ids = out.sequences[:, prompt_len:]  # continuation token ids
+            gen_text = tok.batch_decode(gen_ids, skip_special_tokens=True)
+            
+            if gen_ids.size(1) == 0: # Gaurd log-probs and entropies just in case no tokens were generated
+                last_logp, last_ent, layer_data = [], [], []
+            
+            steps = out.hidden_states
+            assert steps is not None, "Hidden states missing. Did you set output_hidden_states=True?"
 
-            # Per-token log-probs for the continuation
-            # out.scores is a list aligned to each generated step
-            token_logps = scores_to_token_logprobs(out.scores, gen_ids)
-            conf = summarize_logprobs(token_logps)
+            # Last layer only: entropies and logprobs
+            last_logp = hidden_to_token_logprobs(steps, mdl, gen_ids, layer=-1)
+            last_ent = hidden_to_entropies(steps, mdl, layer=-1)
 
-            # Summarize entropies for last layer tokens
-            def summarize_seq(xs):
-                if not xs: 
-                    return {"mean":0.0,"std":0.0,"min":0.0,"max":0.0,"first":0.0,"last":0.0,"delta":0.0}
-                m = sum(xs)/len(xs)
-                v = sum((x-m)**2 for x in xs)/len(xs)
-                return {"mean":m,"std":v**0.5,"min":min(xs),"max":max(xs),"first":xs[0],"last":xs[-1],"delta":xs[-1]-xs[0]}
-            ent = summarize_seq(entropies) # summarize all possible tokens
-            lp = summarize_seq(token_logps) # summarize only generated tokens
+            # Historical: all layer entropies and logprobs
+            num_layers = len(steps[0])
+            hist_start, hist_end = 1, num_layers - 1
+            
+            layer_data = []
+            for i in range(hist_start, hist_end): # skip final layer and embedding layer
+                ent = hidden_to_entropies(steps, mdl, layer=i)
+                lp  = hidden_to_token_logprobs(steps, mdl, gen_ids, layer=i)
+                layer_data.append((ent, lp))
+
+            # Summarize historical data per layer
+            hist_entropies = []
+            hist_logprobs = []
+            for thing in layer_data:
+                entropies, logprobs = thing
+                hist_entropies.append(summarize_entropies(entropies))
+                hist_logprobs.append(summarize_logprobs(logprobs))
 
             # Pick an answer based on log-likeihood and check if it's correct
             choices = ex["mc1_targets"]["choices"]
@@ -170,9 +173,9 @@ def main():
             is_correct = (labels[guess] == 1)
             correct += int(is_correct)
             
+            # Add an id to make sure each question is uniquely identified
             qid = ex.get("id", None)
             if qid is None:
-                # fallback: index within the (shuffled, sliced) dataset
                 qid = f"{args.split}:{start + i}"  # n = 0,1,2... as you iterate
 
             # Store the results for jsonl
@@ -183,36 +186,30 @@ def main():
                 "question": q,
                 "choices": choices,
                 "labels": labels,
-                "generated": gen_text,
+                "generated": gen_text[0],
                 "pred_index": guess,
                 "pred_text": choices[guess],
                 "correct": bool(is_correct),
-                # confidence summaries
-                "avg_logprob": conf["avg_logprob"],
-                "avg_prob": conf["avg_prob"],
-                "perplexity": conf["perplexity"],
-                "lp_mean": lp["mean"], 
-                "lp_std": lp["std"], 
-                "lp_min": lp["min"], 
-                "lp_max": lp["max"],
-                "lp_first": lp["first"], 
-                "lp_last": lp["last"], 
-                "lp_delta": lp["delta"],
-                "ent_mean": ent["mean"], 
-                "ent_std": ent["std"], 
-                "ent_min": ent["min"], 
-                "ent_max": ent["max"],
-                "ent_first": ent["first"], 
-                "ent_last": ent["last"], 
-                "ent_delta": ent["delta"],
+                "num_layers_total": num_layers,
+                "historical_layer_range": [hist_start, hist_end],
             }
+            
+            # Create json for historical layer summaries
+            historical_layers = [
+                {
+                    "layer": i+1,
+                    "ent_summary": ent,
+                    "lp_summary": lp
+                }
+                for i, (ent, lp) in enumerate(zip(hist_entropies, hist_logprobs))
+            ]
+            rec["historical_layers"] = historical_layers
 
-            # Store token-level info if requested for last layer
-            if args.store_token_probs:
-                # Truncate to keep JSONL compact
-                cap = max(0, int(args.token_prob_cap))
-                rec["gen_tokens"] = tok.convert_ids_to_tokens(gen_ids[:cap].tolist())
-                rec["token_logprobs"] = token_logps[:cap]
+            # Create json for last layer info
+            rec["last_layer"] = {
+                    "logprobs_seq": last_logp,
+                    "entropies_seq": last_ent,
+                }
 
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
@@ -226,7 +223,6 @@ def main():
         "model": args.model,
         "run_id": run_id,
         "predictions_file": str(pred_path),
-        "notes": "Includes avg_logprob/avg_prob/perplexity; per-token logprobs optional."
     }
     with open(met_path, "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=2)

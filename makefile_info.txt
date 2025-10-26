@@ -1,0 +1,29 @@
+QUICK START
+To run the V1 (Logistic Regression) model: make full_run_lr (or just: make full_run)
+
+To run the V2 (Neural Network) model: make full_run_nn
+
+SHARED STEPS
+These commands get the raw data used by both models.
+
+make collect_train_data (Gets raw training data -> outputs/train_run.jsonl)
+
+make collect_test_data (Gets raw testing data -> outputs/eval_run.jsonl)
+
+V1: LOGISTIC REGRESSION
+make featurize_train_data_lr (Script: featurize.py -> Output: train_run.features.csv)
+
+make train_model_lr (Script: train_chair.py -> Output: chair_clf.pkl)
+
+make featurize_test_data_lr (Script: featurize.py -> Output: eval_run.features.csv)
+
+make predict_test_data_lr (Script: predict_chair.py -> Output: eval_run.chair_scored.jsonl)
+
+V2: NEURAL NETWORK
+make featurize_train_data_nn (Script: featurize_nn.py -> Output: train_run.features.jsonl)
+
+make train_model_nn (Script: train_chair_nn.py -> Output: chair_nn.pth)
+
+make featurize_test_data_nn (Script: featurize_nn.py -> Output: eval_run.features.jsonl)
+
+make predict_test_data_nn (Script: predict_chair_nn.py -> Output: eval_run.chair_scored.jsonl)

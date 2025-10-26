@@ -1,42 +1,42 @@
-import argparse, json, csv
+import argparse, json
 from pathlib import Path
-import re # Using re for sorting keys
+import numpy as np
+import sys
 
 """
 SUMMARY:
-Post Processing: Extracts features from multiple-choice evaluation outputs
-(from eval_mc1.py) and saves them in a .jsonl format suitable for
-a neural network.
-
-This is a modification of featurize.py. Instead of a flat CSV, it saves
-features as a JSON object per line, preserving the vector structure of
-token sequences.
+Extracts features from eval_mc1.py's JSONL output for the NN classifier.
+This version saves features to a .jsonl file, preserving the vector/sequence
+structure needed for the attention model.
+It also creates a .meta.json file to store scalar feature names.
 """
 
 def fetch_args():
     ap = argparse.ArgumentParser()
-    ap.add.argument("--preds", required=True, help="outputs/*.jsonl from eval_mc1")
-    ap.add_argument("--out", default="", help="out JSONL path")
-    ap.add_argument("--K", type=int, default=32, help="tail length for token logprob sequence")
+    # This is the line that was fixed before
+    ap.add_argument("--preds", required=True, help="outputs/*.jsonl from eval_mc1")
+    ap.add_argument("--out", default="", help="Out .jsonl path (e.g., outputs/train_run.features.jsonl)")
+    ap.add_argument("--K", type=int, default=32, help="Tail length for token logprob/entropy sequences")
     return ap.parse_args()
     
 # Normalize and pad/truncate the last layer tokens
 def pad_tail(xs, k, pad=0.0):
+    """Pads or truncates a list to be of length k."""
     xs = list(xs)[-k:]
-    if len(xs) < k: xs = [pad]*(k-len(xs)) + xs
+    if len(xs) < k: 
+        xs = [pad]*(k-len(xs)) + xs
     return xs
 
-# Helper to sort feature keys naturally (e.g., layer1, layer2, layer10)
-def natural_sort_key(s):
-    return [int(text) if text.isdigit() else text.lower()
-            for text in re.split(r'([0-9]+)', s)]
-
-# Extract features from a single record (default K=32 tokens)
+# Extract features from a single record
 def row_from_record(r, K=32):
+    """
+    Extracts a label (y) and a feature dictionary (feats) from a raw JSON record.
+    Features are split into 'scalar' (single values) and 'sequence' (vectors).
+    """
     # Label: 1 = hallucination (wrong), 0 = correct
+    # We get this from tag_mc1.py, but fallback to 'correct' field if not present
     y = int(r.get("hallucination", not r.get("correct", False)))
     
-    # --- Scalar Features ---
     scalar_feats = {}
     hist = sorted(r.get("historical_layers", []), key=lambda d: d.get("layer", 0))
     for item in hist:
@@ -49,72 +49,89 @@ def row_from_record(r, K=32):
         for k, v in en.items():
             scalar_feats[f"layer{L}_ent_{k}"] = float(v)
     
-    # --- Sequence Features (as vectors) ---
+    # Last layer token sequences (padded/truncated to K)
     last = r.get("last_layer", {})
     lp_seq  = pad_tail(last.get("logprobs_seq", []), K, 0.0)
     ent_seq = pad_tail(last.get("entropies_seq", []), K, 0.0)
     
-    # Create the final feature dictionary
-    features = {
-        "scalar_features": scalar_feats,
-        "last_lp_tail_vec": list(lp_seq),
-        "last_ent_tail_vec": list(ent_seq),
+    # This is the key change from featurize.py:
+    # We store the sequences as actual lists (vectors)
+    sequence_feats = {
+        "last_lp_tail_vec": [float(v) for v in lp_seq],
+        "last_ent_tail_vec": [float(v) for v in ent_seq]
     }
         
-    return y, features
+    return y, scalar_feats, sequence_feats
 
 def main():
     args = fetch_args()
 
     # Set up paths
     src = Path(args.preds)
-    out = Path(args.out) if args.out else src.with_suffix(".features.jsonl")
+    if not args.out:
+        print("Error: --out argument is required for featurize_nn.py")
+        print("Example: --out outputs/train_run.features.jsonl")
+        sys.exit(1)
+        
+    out_jsonl = Path(args.out)
+    out_meta = out_jsonl.with_suffix(".meta.json")
 
     # Read input, extract features, write JSONL
-    rows = []
     all_scalar_keys = set()
-
-    with open(src, "r", encoding="utf-8") as f_in:
+    total_rows = 0
+    
+    print(f"Starting featurization for K={args.K}...")
+    with open(src, "r", encoding="utf-8") as f_in, \
+         open(out_jsonl, "w", encoding="utf-8") as f_out:
+        
         for line in f_in:
             line = line.strip()
             if not line: 
                 continue
+            
             r = json.loads(line)
-            y, feats = row_from_record(r, args.K)
-            rows.append({"y": y, "features": feats})
-            all_scalar_keys.update(feats["scalar_features"].keys())
+            y, scalar_feats, sequence_feats = row_from_record(r, args.K)
+            
+            # Update the set of all scalar keys found
+            all_scalar_keys.update(scalar_feats.keys())
+            
+            # Combine all features into one record for this line
+            record_out = {
+                "y": y,
+                "scalar_features": scalar_feats,
+                "sequence_features": sequence_feats
+            }
+            
+            f_out.write(json.dumps(record_out, ensure_ascii=False) + "\n")
+            total_rows += 1
 
-    if not rows:
-        raise SystemExit("No rows parsed from input.")
+    if total_rows == 0:
+        print(f"Error: No rows parsed from input file: {src}")
+        sys.exit(1)
 
-    # We need a fixed, sorted order for the scalar features
-    # so the model always sees them in the same order.
-    sorted_scalar_keys = sorted(list(all_scalar_keys), key=natural_sort_key)
+    print(f"Successfully processed {total_rows} rows.")
+
+    # Save the metadata (the ordered list of scalar feature names)
+    # This is CRITICAL for the model to know the order of inputs
+    sorted_scalar_keys = sorted(list(all_scalar_keys))
     
-    # Save metadata (like the scalar key order)
+    # --- THIS IS THE FIX ---
+    # The 'scalar_feature_names' key was missing in your old version
     meta = {
         "K": args.K,
-        "scalar_feature_keys": sorted_scalar_keys,
-        "num_scalar_features": len(sorted_scalar_keys)
+        "n_scalar_features": len(sorted_scalar_keys),
+        "scalar_feature_names": sorted_scalar_keys, 
+        "sequence_feature_names": ["last_lp_tail_vec", "last_ent_tail_vec"]
     }
-    meta_path = out.with_suffix(".meta.json")
-    with open(meta_path, "w", encoding="utf-8") as f_meta:
+    # -----------------------
+    
+    with open(out_meta, "w", encoding="utf-8") as f_meta:
         json.dump(meta, f_meta, indent=2)
-    print(f"Wrote feature metadata: {meta_path}")
 
-    # Write the .jsonl file
-    with open(out, "w", encoding="utf-8") as f_out:
-        for row in rows:
-            # Re-order scalar features dictionary based on the sorted keys
-            scalar_dict = row["features"]["scalar_features"]
-            sorted_scalars = [scalar_dict.get(k, 0.0) for k in sorted_scalar_keys]
-            
-            # Replace the dict with the ordered list
-            row["features"]["scalar_features"] = sorted_scalars
-            
-            f_out.write(json.dumps(row) + "\n")
-
-    print(f"Wrote features for NN training: {out}")
+    # Note the new print statements, which you'll see in your log next time:
+    print(f"Wrote features to: {out_jsonl}")
+    print(f"Wrote metadata to: {out_meta}")
 
 if __name__ == "__main__":
     main()
+

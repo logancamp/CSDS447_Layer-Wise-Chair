@@ -2,13 +2,14 @@ import argparse, joblib
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LogisticRegression
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import (
     roc_auc_score, average_precision_score, accuracy_score,
     precision_recall_fscore_support, confusion_matrix, classification_report
 )
+from sklearn.feature_selection import VarianceThreshold
+from sklearn.linear_model import LogisticRegressionCV
 import json, time
 import numpy as np
 
@@ -37,10 +38,21 @@ def main():
     # Train logistic regression with standard scaling
     # TODO: expand to an attention-based model like in the paper
     pipe = Pipeline([
-        ("imputer", SimpleImputer(strategy="median")),  # new step
-        ("scaler", StandardScaler(with_mean=True, with_std=True)),
-        ("clf", LogisticRegression(max_iter=200, class_weight="balanced"))
-    ])
+    ("imputer", SimpleImputer(strategy="median")),
+    ("scaler", StandardScaler(with_mean=True, with_std=True)),
+    ("vth", VarianceThreshold(threshold=1e-6)),
+    ("clf", LogisticRegressionCV(
+        Cs=np.logspace(-2, 1, 8).tolist(),
+        cv=5,
+        penalty="l2",
+        solver="liblinear",
+        class_weight="balanced",
+        max_iter=5000,
+        scoring="roc_auc",
+        n_jobs=-1,
+        refit=True
+    ))
+])
     
     # Fit and evaluate
     pipe.fit(Xtr, ytr)

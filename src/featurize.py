@@ -14,7 +14,7 @@ def fetch_args():
     ap = argparse.ArgumentParser()
     ap.add_argument("--preds", required=True, help="outputs/*.jsonl from eval_mc1")
     ap.add_argument("--out", default="", help="out CSV path")
-    ap.add_argument("--K", type=int, default=32, help="tail length for token logprob sequence")
+    ap.add_argument("--K", type=int, default=16, help="tail length for token logprob sequence")
     return ap.parse_args()
     
 # Normalize and pad/truncate the last layer tokens
@@ -52,6 +52,11 @@ def row_from_record(r, K=32):
     for i, v in enumerate(ent_seq, 1):
         feats[f"last_ent_tail_{i}"] = float(v)
     
+    # Add overlap features if present (from tagged file)
+    for k in ["overlap_pred", "overlap_correct", "overlap_max_distractor"]:
+        if k in r:
+            feats[k] = float(r[k])
+            
     # For when we change to the attention model
     # feats["last_lp_tail_vec"]  = list(lp_seq)
     # feats["last_ent_tail_vec"] = list(ent_seq)
@@ -87,7 +92,7 @@ def main():
         w = csv.writer(f_out)
         w.writerow(["y"] + feat_keys)
         for y, feats in rows:
-            w.writerow([y] + [feats.get(k, float("nan")) for k in feat_keys])
+            w.writerow([y] + [feats.get(k, 0.0) for k in feat_keys])
 
     print(f"Wrote features for training: {out}")
 

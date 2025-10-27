@@ -24,7 +24,7 @@ tag_test_data:
 # --- V1: Logistic Regression Pipeline ---
 
 featurize_train_data_lr:
-	python src/featurize.py --preds outputs/train_run.jsonl --K 32 \
+	python src/featurize.py --preds outputs/train_run.tagged.jsonl --K 18 \
 	  --out outputs/train_run.features.csv
 
 train_model_lr: featurize_train_data_lr
@@ -32,7 +32,7 @@ train_model_lr: featurize_train_data_lr
 	  --out outputs/chair_clf.pkl
 
 featurize_test_data_lr:
-	python src/featurize.py --preds outputs/eval_run.jsonl --K 32 \
+	python src/featurize.py --preds outputs/eval_run.tagged.jsonl --K 18 \
 	  --out outputs/eval_run.features.csv
 
 predict_test_data_lr: featurize_test_data_lr
@@ -47,7 +47,7 @@ full_run_lr: setup collect_train_data tag_train_data train_model_lr collect_test
 # --- V2: Neural Network (NN) Pipeline ---
 
 featurize_train_data_nn:
-	python src/featurize_nn.py --preds outputs/train_run.jsonl --K 32 \
+	python src/featurize_nn.py --preds outputs/train_run.tagged.jsonl --K 32 \
 	  --out outputs/train_run.features.jsonl
 
 train_model_nn: featurize_train_data_nn
@@ -55,7 +55,7 @@ train_model_nn: featurize_train_data_nn
 	  --out outputs/chair_nn.pth --epochs 10
 
 featurize_test_data_nn:
-	python src/featurize_nn.py --preds outputs/eval_run.jsonl --K 32 \
+	python src/featurize_nn.py --preds outputs/eval_run.tagged.jsonl --K 32 \
 	  --out outputs/eval_run.features.jsonl
 
 predict_test_data_nn: featurize_test_data_nn

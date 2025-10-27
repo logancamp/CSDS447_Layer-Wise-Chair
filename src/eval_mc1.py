@@ -136,26 +136,48 @@ def main():
             out = cast(GenerateDecoderOnlyOutput, out)
             prompt_len = inputs["input_ids"].shape[1]
             gen_ids = out.sequences[:, prompt_len:]  # continuation token ids
+            
+            if gen_ids.size(1) == 0:
+                out = mdl.generate(
+                    **inputs,
+                    do_sample=False,
+                    max_new_tokens=max(1, args.max_new_tokens),
+                    min_new_tokens=1,                    # <-- forces at least 1 new token
+                    output_hidden_states=True,
+                    return_dict_in_generate=True,
+                )
+                gen_ids = out.sequences[:, prompt_len:]
+                if gen_ids.size(1) == 0:
+                    # If STILL no generated token, skip this example entirely.
+                    continue
+            
             gen_text = tok.batch_decode(gen_ids, skip_special_tokens=True)
-            
-            if gen_ids.size(1) == 0: # Gaurd log-probs and entropies just in case no tokens were generated
-                last_logp, last_ent, layer_data = [], [], []
-            
+
             steps = out.hidden_states
             assert steps is not None, "Hidden states missing. Did you set output_hidden_states=True?"
-
+            
             # Last layer only: entropies and logprobs
             last_logp = hidden_to_token_logprobs(steps, mdl, gen_ids, layer=-1)
             last_ent = hidden_to_entropies(steps, mdl, layer=-1)
 
+            # Alignment sanity check (remove after debugging)
+            if len(last_logp) > 1:
+                with torch.no_grad():
+                    lbl = gen_ids.clone()
+                    lbl[:, :-1] = gen_ids[:, 1:]
+                    lbl[:, -1] = -100
+                    out2 = mdl(input_ids=out.sequences, labels=lbl)
+                    approx = sum(-lp for lp in last_logp[:-1])
+                    assert abs(out2.loss.item() - approx) < 1e-2, "Logprob alignment mismatch"
+                    
             # Historical: all layer entropies and logprobs
             num_layers = len(steps[0])
             hist_start, hist_end = 1, num_layers - 1
             
             layer_data = []
-            for i in range(hist_start, hist_end): # skip final layer and embedding layer
-                ent = hidden_to_entropies(steps, mdl, layer=i)
-                lp  = hidden_to_token_logprobs(steps, mdl, gen_ids, layer=i)
+            for li in range(hist_start, hist_end): # skip final layer and embedding layer
+                ent = hidden_to_entropies(steps, mdl, layer=li)
+                lp  = hidden_to_token_logprobs(steps, mdl, gen_ids, layer=li)
                 layer_data.append((ent, lp))
 
             # Summarize historical data per layer

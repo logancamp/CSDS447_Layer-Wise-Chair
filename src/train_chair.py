@@ -38,21 +38,21 @@ def main():
     # Train logistic regression with standard scaling
     # TODO: expand to an attention-based model like in the paper
     pipe = Pipeline([
-    ("imputer", SimpleImputer(strategy="median")),
-    ("scaler", StandardScaler(with_mean=True, with_std=True)),
-    ("vth", VarianceThreshold(threshold=1e-6)),
-    ("clf", LogisticRegressionCV(
-        Cs=np.logspace(-2, 1, 8).tolist(),
-        cv=5,
-        penalty="l2",
-        solver="liblinear",
-        class_weight="balanced",
-        max_iter=5000,
-        scoring="roc_auc",
-        n_jobs=-1,
-        refit=True
-    ))
-])
+        ("imputer", SimpleImputer(strategy="median")),
+        ("scaler", StandardScaler(with_mean=True, with_std=True)),
+        ("vth", VarianceThreshold(threshold=1e-6)),
+        ("clf", LogisticRegressionCV(
+            Cs=np.logspace(-2, 1, 8).tolist(),
+            cv=5,
+            penalty="l2",
+            solver="liblinear",
+            class_weight="balanced",
+            max_iter=5000,
+            scoring="roc_auc",
+            n_jobs=-1,
+            refit=True
+        ))
+    ])
     
     # Fit and evaluate
     pipe.fit(Xtr, ytr)

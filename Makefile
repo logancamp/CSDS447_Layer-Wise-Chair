@@ -1,7 +1,7 @@
 # --- Setup ---
 setup:
 	export TOKENIZERS_PARALLELISM=false
-	export CHAIR_MODEL="TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+	export CHAIR_MODEL="meta-llama/Meta-Llama-3-8B-Instruct"
 	mkdir -p outputs
 
 # --- Data Collection (Shared) ---

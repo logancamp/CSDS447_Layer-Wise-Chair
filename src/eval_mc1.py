@@ -154,7 +154,7 @@ def main():
                 if gen_ids.size(1) == 0:
                     continue
 
-            scores = out.scores                       # ✅ always taken from final `out`
+            scores = out.scores
             steps  = out.hidden_states
             assert steps is not None, "Hidden states missing. Did you set output_hidden_states=True?"
             

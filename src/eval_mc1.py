@@ -118,7 +118,7 @@ def main():
             
             # Prepare the prompt
             q = ex["question"]
-            prompt = f"{SYS}\nQ: {q}\nA:"
+            prompt = f"{SYS}\nQ: {q}\nA: "
             inputs = tok(prompt, return_tensors="pt")
             inputs = {k: v.to(device) for k,v in inputs.items()} if use_cuda else inputs # move to gpu if available
             
@@ -127,49 +127,67 @@ def main():
                 out = mdl.generate(
                     **inputs,
                     max_new_tokens=args.max_new_tokens,
-                    do_sample=False, # deterministic for clean logits - greedy decoding
-                    output_hidden_states=True, # get hidden states for entropies and logprobs
-                    return_dict_in_generate=True # return a ModelOutput instead of just sequences
+                    do_sample=False,
+                    output_hidden_states=True,
+                    output_scores=True,
+                    return_dict_in_generate=True
                 )
+
             
             # Process output
             out = cast(GenerateDecoderOnlyOutput, out)
             prompt_len = inputs["input_ids"].shape[1]
-            gen_ids = out.sequences[:, prompt_len:]  # continuation token ids
-            
+            gen_ids = out.sequences[:, prompt_len:]
+
+            # zero-token guard with refreshed scores/steps
             if gen_ids.size(1) == 0:
                 out = mdl.generate(
                     **inputs,
                     do_sample=False,
                     max_new_tokens=max(1, args.max_new_tokens),
-                    min_new_tokens=1,                    # <-- forces at least 1 new token
+                    min_new_tokens=1,
                     output_hidden_states=True,
+                    output_scores=True,
                     return_dict_in_generate=True,
                 )
                 gen_ids = out.sequences[:, prompt_len:]
                 if gen_ids.size(1) == 0:
-                    # If STILL no generated token, skip this example entirely.
                     continue
+
+            scores = out.scores                       # ✅ always taken from final `out`
+            steps  = out.hidden_states
+            assert steps is not None, "Hidden states missing. Did you set output_hidden_states=True?"
             
             gen_text = tok.batch_decode(gen_ids, skip_special_tokens=True)
 
-            steps = out.hidden_states
-            assert steps is not None, "Hidden states missing. Did you set output_hidden_states=True?"
-            
             # Last layer only: entropies and logprobs
-            last_logp = hidden_to_token_logprobs(steps, mdl, gen_ids, layer=-1)
-            last_ent = hidden_to_entropies(steps, mdl, layer=-1)
+            last_logp = []
+            last_ent  = []
+            for t, logits in enumerate(scores):
+                row = logits[0].to(torch.float32)
+                logp = torch.log_softmax(row, dim=-1)
+                last_logp.append(logp[gen_ids[0, t]].item())
+                p = torch.exp(logp)
+                last_ent.append(float(-(p * logp).sum().item()))
 
-            # Alignment sanity check (remove after debugging)
-            if len(last_logp) > 1:
-                with torch.no_grad():
-                    lbl = gen_ids.clone()
-                    lbl[:, :-1] = gen_ids[:, 1:]
-                    lbl[:, -1] = -100
-                    out2 = mdl(input_ids=out.sequences, labels=lbl)
-                    approx = sum(-lp for lp in last_logp[:-1])
-                    assert abs(out2.loss.item() - approx) < 1e-2, "Logprob alignment mismatch"
-                    
+            # Labels same shape as input, mask the prompt
+            lbl = out.sequences.clone()
+            lbl[:, :prompt_len] = -100
+            attn = torch.ones_like(out.sequences, device=out.sequences.device)
+
+            with torch.no_grad():
+                chk = mdl(input_ids=out.sequences, attention_mask=attn, labels=lbl)
+
+            num_labeled = (lbl != -100).sum().item()
+
+            # Compute CE over next-token logits to match model's criterion exactly
+            approx_ce = 0.0
+            for t, logits in enumerate(scores):  # logits: [B, V]
+                approx_ce += F.cross_entropy(logits, gen_ids[:, t], reduction="sum").item()
+
+            # Allow small fp drift
+            assert abs(chk.loss.item() * num_labeled - approx_ce) < 1e-1, "Logprob alignment mismatch"
+
             # Historical: all layer entropies and logprobs
             num_layers = len(steps[0])
             hist_start, hist_end = 1, num_layers - 1

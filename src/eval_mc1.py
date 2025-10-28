@@ -6,7 +6,6 @@ import torch
 from logit_utils import summarize_logprobs, summarize_entropies, hidden_to_token_logprobs, hidden_to_entropies
 from typing import cast
 from transformers.generation.utils import GenerateDecoderOnlyOutput
-import torch.nn.functional as F
 
 """
 SUMMARY:
@@ -21,85 +20,65 @@ SYS = "You are concise and truthful. Answer the question factually and directly.
 
 def fetch_args():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--outname", default="", 
-        help="Optional base name for output files")
-    ap.add_argument("--store_token_probs", action="store_true",
-        help="Store per-token log-probs (truncated) and generated token ids")
-    ap.add_argument("--token_prob_cap", type=int, default=32,
-        help="Max number of token log-probs to store per example")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--offset", type=int, default=0)
-    ap.add_argument("--model", default="TinyLlama/TinyLlama-1.1B-Chat-v1.0")
-    ap.add_argument("--split", default="validation")
-    ap.add_argument("--limit", type=int, default=100)
-    ap.add_argument("--max_new_tokens", type=int, default=64)
-    ap.add_argument("--outdir", default="outputs")
     return ap.parse_args()
 
 # Return the index of the candidate with the highest log-likelihood: Same as TruthfulQA
-def pick_by_loglikelihood(mdl, tok, question, choices, device):
+def pick_by_loglikelihood(mdl, tok, question, choices, dev):
     prompt_txt = f"{SYS}\nQ: {question}\nA: "
-    prompt = tok(prompt_txt, return_tensors="pt")
-    prompt_len = prompt["input_ids"].shape[1]
-
+    prompt_len = tok(prompt_txt, return_tensors="pt")["input_ids"].shape[1]
     scores = []
     for c in choices:
-        # Encode prompt + choice together
         cp = tok(prompt_txt + c, return_tensors="pt")
-        input_ids = cp["input_ids"].to(device)
-        attn_mask = cp.get("attention_mask", None)
-        if attn_mask is not None:
-            attn_mask = attn_mask.to(device)
-
-        # Mask the prompt tokens so loss is only computed for choice
-        labels = input_ids.clone()
-        labels[:, :prompt_len] = -100  # without prompt
+        input_ids = cp["input_ids"].to(dev)
+        attn_mask = cp.get("attention_mask")
+        attn_mask = attn_mask.to(dev) if attn_mask is not None else None
+        labels = input_ids.clone(); labels[:, :prompt_len] = -100
         with torch.no_grad():
             out = mdl(input_ids=input_ids, attention_mask=attn_mask, labels=labels)
             num_labeled = (labels != -100).sum().item()
-            loglik = -out.loss.item() * max(1, num_labeled)
-        scores.append(loglik)
+            scores.append(-out.loss.item() * max(1, num_labeled))
     return int(torch.tensor(scores).argmax().item())
 
 def main():
+    # Configure hyperparameters
     args = fetch_args()
+    # model = "meta-llama/Meta-Llama-3-8B-Instruct"
+    model = "meta-llama/Llama-3.2-1B-Instruct"  # smaller for testing
+    limit = 100
+    max_new_tokens = 64
 
     # Set up output paths
-    outdir = Path(args.outdir)
+    outdir = Path("outputs")
     outdir.mkdir(parents=True, exist_ok=True)
-
+    outname = "mc1_results"
+    pred_path = outdir / f"{outname}.jsonl"
+    met_path = outdir / f"{outname}.metrics.json"
     stamp = time.strftime("%Y%m%d-%H%M%S")
-    run_id = f"mc1_{Path(args.model).name}_{stamp}_n{args.limit}" # default run id
-    if args.outname: # override run_id if an outname is given
-        run_id = args.outname
-    
-    pred_path = outdir / f"{run_id}.jsonl"
-    met_path = outdir / f"{run_id}.metrics.json"
     
     # Check if cuda is available for device
     use_cuda = torch.cuda.is_available()
-    device = "cuda" if use_cuda else "cpu"
+    device = torch.device("cuda:0" if use_cuda else "cpu")
 
     # Load model and tokenizer
-    tok = AutoTokenizer.from_pretrained(args.model)
-    
-    # Ensure pad token exists (fixes a bug with some models)
-    if tok.pad_token is None:
-        tok.pad_token = tok.eos_token
+    tok = AutoTokenizer.from_pretrained(model)
+    tok.pad_token = tok.pad_token or tok.eos_token
+    tok.padding_side = "left"
     
     # Load the LLM model
     mdl = AutoModelForCausalLM.from_pretrained(
-        args.model,
+        model,
         device_map = "auto" if use_cuda else None,
         torch_dtype = torch.float16 if use_cuda else None,
     )
-    mdl.to(device)
-    mdl.eval() # Switch model to eval mode
-
+    mdl.config.pad_token_id = tok.pad_token_id
+    mdl.eval()
+    
     # Load the dataset (split, shuffled, sliced)
-    ds = load_dataset("truthful_qa","multiple_choice")[args.split].shuffle(seed=args.seed)
+    ds = load_dataset("truthful_qa","multiple_choice")["validation"].shuffle(seed=args.seed)
     start = max(0, args.offset)
-    end = start + args.limit if args.limit else len(ds)
+    end = start + limit if limit else len(ds)
     ds = ds.select(range(start, min(end, len(ds))))
     
     """ Each example in the dataset looks like this:
@@ -119,78 +98,41 @@ def main():
             # Prepare the prompt
             q = ex["question"]
             prompt = f"{SYS}\nQ: {q}\nA: "
-            inputs = tok(prompt, return_tensors="pt")
-            inputs = {k: v.to(device) for k,v in inputs.items()} if use_cuda else inputs # move to gpu if available
+            inputs = tok(prompt, return_tensors="pt", padding=True)
+            inputs = {k: v.to(device) for k, v in inputs.items()}  
             
             # Generate output
             with torch.inference_mode():
                 out = mdl.generate(
                     **inputs,
-                    max_new_tokens=args.max_new_tokens,
-                    do_sample=False,
+                    max_new_tokens=max_new_tokens,
+                    min_new_tokens=1,
+                    pad_token_id=tok.pad_token_id,
                     output_hidden_states=True,
-                    output_scores=True,
-                    return_dict_in_generate=True
+                    return_dict_in_generate=True,
+                    use_cache=True,
+                    cache_implementation="dynamic"
                 )
 
-            
             # Process output
             out = cast(GenerateDecoderOnlyOutput, out)
             prompt_len = inputs["input_ids"].shape[1]
             gen_ids = out.sequences[:, prompt_len:]
+            gen_text = tok.batch_decode(gen_ids, skip_special_tokens=True)
 
-            # zero-token guard with refreshed scores/steps
-            if gen_ids.size(1) == 0:
-                out = mdl.generate(
-                    **inputs,
-                    do_sample=False,
-                    max_new_tokens=max(1, args.max_new_tokens),
-                    min_new_tokens=1,
-                    output_hidden_states=True,
-                    output_scores=True,
-                    return_dict_in_generate=True,
-                )
-                gen_ids = out.sequences[:, prompt_len:]
-                if gen_ids.size(1) == 0:
-                    continue
-
-            scores = out.scores
             steps  = out.hidden_states
             assert steps is not None, "Hidden states missing. Did you set output_hidden_states=True?"
             
-            gen_text = tok.batch_decode(gen_ids, skip_special_tokens=True)
-
-            # Last layer only: entropies and logprobs
-            last_logp = []
-            last_ent  = []
-            for t, logits in enumerate(scores):
-                row = logits[0].to(torch.float32)
-                logp = torch.log_softmax(row, dim=-1)
-                last_logp.append(logp[gen_ids[0, t]].item())
-                p = torch.exp(logp)
-                last_ent.append(float(-(p * logp).sum().item()))
-
-            # Labels same shape as input, mask the prompt
-            lbl = out.sequences.clone()
-            lbl[:, :prompt_len] = -100
-            attn = torch.ones_like(out.sequences, device=out.sequences.device)
-
-            with torch.no_grad():
-                chk = mdl(input_ids=out.sequences, attention_mask=attn, labels=lbl)
-
-            num_labeled = (lbl != -100).sum().item()
-
-            # Compute CE over next-token logits to match model's criterion exactly
-            approx_ce = 0.0
-            for t, logits in enumerate(scores):  # logits: [B, V]
-                approx_ce += F.cross_entropy(logits, gen_ids[:, t], reduction="sum").item()
-
-            # Allow small fp drift
-            assert abs(chk.loss.item() * num_labeled - approx_ce) < 1e-1, "Logprob alignment mismatch"
-
-            # Historical: all layer entropies and logprobs
             num_layers = len(steps[0])
-            hist_start, hist_end = 1, num_layers - 1
+            FINAL_L = num_layers - 1
+
+            # Final layer sequences
+            last_ent_seq = hidden_to_entropies(steps, mdl, layer=FINAL_L)
+            last_lp_seq  = hidden_to_token_logprobs(steps, mdl, gen_ids, layer=FINAL_L)
+
+            # All historical layer entropies and logprobs
+            num_layers = len(steps[0])
+            hist_start, hist_end = 1, FINAL_L
             
             layer_data = []
             for li in range(hist_start, hist_end): # skip final layer and embedding layer
@@ -216,13 +158,12 @@ def main():
             # Add an id to make sure each question is uniquely identified
             qid = ex.get("id", None)
             if qid is None:
-                qid = f"{args.split}:{start + i}"  # n = 0,1,2... as you iterate
+                qid = f"val:{start + i}"  # n = 0,1,2... as you iterate
 
             # Store the results for jsonl
             rec = {
                 "qid": qid,
-                "split": args.split,
-                "model_name": args.model,
+                "model_name": model,
                 "question": q,
                 "choices": choices,
                 "labels": labels,
@@ -233,8 +174,6 @@ def main():
                 "num_layers_total": num_layers,
                 "historical_layer_range": [hist_start, hist_end],
             }
-            
-            # Create json for historical layer summaries
             historical_layers = [
                 {
                     "layer": i+1,
@@ -247,21 +186,21 @@ def main():
 
             # Create json for last layer info
             rec["last_layer"] = {
-                    "logprobs_seq": last_logp,
-                    "entropies_seq": last_ent,
+                    "logprobs_seq": last_lp_seq,
+                    "entropies_seq": last_ent_seq,
                 }
-
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
     # Print out metrics and store in a json file
     acc = correct / total if total else 0.0
     metrics = {
+        "timestamp": stamp,
         "dataset": "truthful_qa:multiple_choice",
         "n": total,
         "accuracy": acc,
         "error_rate": 1.0 - acc,
-        "model": args.model,
-        "run_id": run_id,
+        "model": model,
+        "outname": outname,
         "predictions_file": str(pred_path),
     }
     with open(met_path, "w", encoding="utf-8") as f:

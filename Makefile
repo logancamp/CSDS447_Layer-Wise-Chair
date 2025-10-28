@@ -1,17 +1,14 @@
 # --- Setup ---
 setup:
 	export TOKENIZERS_PARALLELISM=false
-	export CHAIR_MODEL="meta-llama/Meta-Llama-3-8B-Instruct"
 	mkdir -p outputs
 
 # --- Data Collection (Shared) ---
 collect_train_data: setup
-	python src/eval_mc1.py --split validation --limit 500 --max_new_tokens 64 \
-	  --outname train_run ${CHAIR_MODEL:+--model "$CHAIR_MODEL"}
+	python src/eval_mc1.py --seed 42
 
 collect_test_data: setup
-	python src/eval_mc1.py --split validation --offset 500 --limit 200 --max_new_tokens 64 \
-	  --outname eval_run ${CHAIR_MODEL:+--model "$CHAIR_MODEL"}
+	python src/eval_mc1.py --seed 42 --offset 500
 
 # --- Tagging (Shared) ---
 tag_train_data:

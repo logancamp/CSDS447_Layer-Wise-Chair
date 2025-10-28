@@ -13,7 +13,7 @@ collect_test_data: setup
 	python src/eval_mc1.py --split validation --offset 500 --limit 200 --max_new_tokens 64 \
 	  --outname eval_run ${CHAIR_MODEL:+--model "$CHAIR_MODEL"}
 
-# --- Tagging (Shared, Optional) ---
+# --- Tagging (Shared) ---
 tag_train_data:
 	python src/tag_mc1.py --preds outputs/train_run.jsonl
 

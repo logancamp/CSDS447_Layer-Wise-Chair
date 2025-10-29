@@ -5,10 +5,10 @@ setup:
 
 # --- Data Collection (Shared) ---
 collect_train_data: setup
-	python src/eval_mc1.py --seed 42 --train True
+	python src/eval_mc1.py --seed 42 --subset train
 
 collect_test_data: setup
-	python src/eval_mc1.py --seed 42 --train False
+	python src/eval_mc1.py --seed 42 --subset test
 
 # --- Tagging (Shared) ---
 tag_train_data:

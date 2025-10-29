@@ -22,7 +22,7 @@ SYS = "You are concise and truthful. Answer the question factually and directly.
 def fetch_args():
     ap = argparse.ArgumentParser()
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--train", type=bool, default=True, help="If set, use training split; else use test split")
+    ap.add_argument("--subset", choices=["train","test"], default="test")
     return ap.parse_args()
 
 # Return the index of the candidate with the highest log-likelihood: Same as TruthfulQA
@@ -52,7 +52,7 @@ def main():
     # Set up output paths
     outdir = Path("outputs")
     outdir.mkdir(parents=True, exist_ok=True)
-    outname = "mc1_results"
+    outname = "mc1_results" + f"_{args.subset}"
     pred_path = outdir / f"{outname}.jsonl"
     met_path = outdir / f"{outname}.metrics.json"
     stamp = time.strftime("%Y%m%d-%H%M%S")
@@ -76,18 +76,11 @@ def main():
     mdl.eval()    
 
     # Load full split once
-    full_ds = load_dataset("truthful_qa", "multiple_choice")["validation"].shuffle(seed=args.seed)
+    full_ds = load_dataset("truthful_qa", "multiple_choice")["validation"]
 
-    indices = list(range(len(full_ds)))
-    train_idx, test_idx = train_test_split(indices, test_size=0.1, random_state=args.seed)
-
-    if args.train: 
-        ds = full_ds.select(train_idx) 
-        print(f"Evaluating on {len(ds)} training examples.")
-    else: 
-        ds = full_ds.select(test_idx)
-        print(f"Evaluating on {len(ds)} test examples.")
-    
+    split = full_ds.train_test_split(test_size=0.1, seed=args.seed, shuffle=True)
+    train_idx, test_idx = split['train'], split['test']
+    ds = train_idx if args.subset == "train" else test_idx
     
     """ Each example in the dataset looks like this:
     {

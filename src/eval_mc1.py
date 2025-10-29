@@ -6,6 +6,8 @@ import torch
 from logit_utils import summarize_logprobs, summarize_entropies, hidden_to_token_logprobs, hidden_to_entropies
 from typing import cast
 from transformers.generation.utils import GenerateDecoderOnlyOutput
+import hashlib
+from collections import defaultdict
 
 """
 SUMMARY:
@@ -21,8 +23,14 @@ SYS = "You are concise and truthful. Answer the question factually and directly.
 def fetch_args():
     ap = argparse.ArgumentParser()
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--subset", choices=["train","test"], default="test")
     return ap.parse_args()
+
+def split_bucket(qid: str, p_train=0.72, p_val=0.18, p_test=0.10) -> str:
+    h = int(hashlib.sha1(qid.encode()).hexdigest(), 16) % 10_000
+    r = h / 10_000.0
+    if r < p_train: return "train"
+    if r < p_train + p_val: return "val"
+    return "test"
 
 # Return the index of the candidate with the highest log-likelihood: Same as TruthfulQA
 def pick_by_loglikelihood(mdl, tok, question, choices, dev):
@@ -51,7 +59,7 @@ def main():
     # Set up output paths
     outdir = Path("outputs")
     outdir.mkdir(parents=True, exist_ok=True)
-    outname = "mc1_results" + f"_{args.subset}"
+    outname = "mc1_results"
     pred_path = outdir / f"{outname}.jsonl"
     met_path = outdir / f"{outname}.metrics.json"
     stamp = time.strftime("%Y%m%d-%H%M%S")
@@ -80,11 +88,7 @@ def main():
     mdl.eval()    
 
     # Load full split once
-    full_ds = load_dataset("truthful_qa", "multiple_choice")["validation"]
-
-    split = full_ds.train_test_split(test_size=0.1, seed=args.seed, shuffle=True)
-    train_idx, test_idx = split['train'], split['test']
-    ds = train_idx if args.subset == "train" else test_idx
+    ds = load_dataset("truthful_qa", "multiple_choice")["validation"]
     
     """ Each example in the dataset looks like this:
     {
@@ -96,7 +100,9 @@ def main():
     }
     """
 
-    total = len(ds); correct = 0
+    total = len(ds)
+    correct = 0
+    by_split = defaultdict(lambda: {"n": 0, "correct": 0})
     with open(pred_path, "w", encoding="utf-8") as f:
         for i, ex in enumerate(ds):
             
@@ -117,6 +123,10 @@ def main():
                     output_hidden_states=True,
                     return_dict_in_generate=True,
                     use_cache=True,
+                    do_sample=False, 
+                    temperature=None, 
+                    top_p=None, 
+                    top_k=None
                 )
 
             # Process output
@@ -168,14 +178,19 @@ def main():
             is_correct = (labels[guess] == 1)
             correct += int(is_correct)
             
-            # Add an id to make sure each question is uniquely identified
+            # Stable ID (prefer dataset's id; fallback to deterministic hash of question text)
             qid = ex.get("id", None)
             if qid is None:
-                qid = f"{args.subset}:{i}"
+                qid = f"tqa:{hashlib.sha1(q.encode()).hexdigest()[:12]}"
+
+            split = split_bucket(str(qid))
+            by_split[split]["n"] += 1
+            by_split[split]["correct"] += int(is_correct)
 
             # Store the results for jsonl
             rec = {
                 "qid": qid,
+                "split": split,
                 "model_name": model,
                 "question": q,
                 "choices": choices,
@@ -187,24 +202,28 @@ def main():
                 "hallucination": not is_correct,
                 "num_layers_total": num_layers,
                 "historical_layer_range": [hist_start, hist_end],
-                "chair_token_traces": chair_token_traces # per-token summaries across historical layers (used to be "historical_layers")
-            }
-
-            # Create json for last layer info
-            rec["last_layer"] = {
+                "chair_token_traces": chair_token_traces,
+                "last_layer": {
                     "logprobs_seq": last_lp_seq,
                     "entropies_seq": last_ent_seq,
-                }
+                },
+            }
+
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
     # Print out metrics and store in a json file
-    acc = correct / total if total else 0.0
     metrics = {
         "timestamp": stamp,
         "dataset": "truthful_qa:multiple_choice",
-        "n": total,
-        "accuracy": acc,
-        "error_rate": 1.0 - acc,
+        "n_total": len(ds),
+        "overall_accuracy": correct / total if total else 0.0,
+        "per_split": {
+            s: {
+                "n": v["n"],
+                "accuracy": (v["correct"] / v["n"] if v["n"] else 0.0)
+            }
+            for s, v in by_split.items()
+        },
         "model": model,
         "outname": outname,
         "predictions_file": str(pred_path),

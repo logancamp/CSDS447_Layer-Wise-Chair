@@ -5,31 +5,25 @@ setup:
 
 
 # --- Data Collection (Shared) ---
-collect_train_data: setup
-	python src/eval_mc1.py --seed 42 --subset train
-
-collect_test_data: setup
-	python src/eval_mc1.py --seed 42 --subset test
+collect_data: setup
+	python src/eval_mc1.py --seed 42
 
 
 # --- V1: Logistic Regression Pipeline ---
-featurize_train_data_lr:
-	python src/featurize.py --preds outputs/mc1_results_train.jsonl --K 18
+featurize_data_lr:
+	python src/featurize.py --preds outputs/mc1_results.jsonl --K 18
 
-featurize_test_data_lr:
-	python src/featurize.py --preds outputs/mc1_results_test.jsonl --K 18
+train_model_lr: featurize_data_lr
+	python src/train_chair.py --features outputs/mc1_results.features.csv
 
-train_model_lr: featurize_train_data_lr
-	python src/train_chair.py --features outputs/mc1_results_train.features.csv
-
-predict_test_data_lr: featurize_test_data_lr
+predict_lr: featurize_data_lr
 	python src/predict_chair.py \
 	  --model_pkl outputs/chair_classifier.pkl \
-	  --train_metrics outputs/chair_classifier.metrics.jsonl \
-	  --test_data outputs/mc1_results_test.jsonl \
-	  --features outputs/mc1_results_test.features.csv
+	  --train_metrics outputs/chair_classifier.train_metrics.json \
+	  --test_data outputs/mc1_results.jsonl \
+	  --features outputs/mc1_results.features.csv
 
-full_run_lr: setup collect_train_data train_model_lr collect_test_data predict_test_data_lr
+full_run_lr: setup collect_data train_model_lr predict_lr
 
 
 # --- V2: Neural Network (NN) Pipeline ---

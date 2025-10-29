@@ -22,10 +22,18 @@ def pad_tail(xs, k, pad=0.0):
     if len(xs) < k: xs = [pad]*(k-len(xs)) + xs
     return xs
 
-# Extract features from a single record (default K=32 tokens)
-def row_from_record(r, K=32):
+# Extract features from a single record (default K=16 tokens)
+def row_from_record(r, K=16):
     # Label: 1 = hallucination (wrong), 0 = correct
     y = int(r["hallucination"])
+    
+    qid = r.get("qid", "")
+    if not qid:
+        raise ValueError("Missing 'qid' in record; ensure eval writes it.")
+
+    split = r.get("split")
+    if split is None:
+        raise ValueError("Missing 'split' in record; ensure eval writes it.")
     
     # Scalar summaries from eval_mc1
     feats = {}
@@ -55,7 +63,7 @@ def row_from_record(r, K=32):
     for i, v in enumerate(ent_seq, 1):
         feats[f"last_ent_tail_{i}"] = float(v)
             
-    return y, feats
+    return y, feats, {"qid": qid, "split": split}
 
 def main():
     args = fetch_args()
@@ -73,8 +81,8 @@ def main():
             if not line: 
                 continue
             r = json.loads(line)
-            y, feats = row_from_record(r, args.K)
-            rows.append((y, feats))
+            y, feats, meta = row_from_record(r, args.K)
+            rows.append((y, feats, meta))
             all_keys |= feats.keys()
 
     if not rows:
@@ -83,9 +91,9 @@ def main():
     feat_keys = sorted(all_keys)
     with open(out, "w", newline="", encoding="utf-8") as f_out:
         w = csv.writer(f_out)
-        w.writerow(["y"] + feat_keys)
-        for y, feats in rows:
-            w.writerow([y] + [feats.get(k, 0.0) for k in feat_keys])
+        w.writerow(["qid", "split", "y"] + feat_keys)
+        for y, feats, meta in rows:
+             w.writerow([meta["qid"], meta["split"], y] + [feats.get(k, 0.0) for k in feat_keys])
 
     print(f"Wrote features: {out}")
 

@@ -1,6 +1,7 @@
-import argparse, joblib
+import argparse, joblib, json, time
+from pathlib import Path
+import numpy as np
 import pandas as pd
-from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
@@ -10,8 +11,6 @@ from sklearn.metrics import (
 )
 from sklearn.feature_selection import VarianceThreshold
 from sklearn.linear_model import LogisticRegressionCV
-import json, time
-import numpy as np
 
 """
 SUMMARY:
@@ -28,12 +27,22 @@ def main():
 
     # Load features
     df = pd.read_csv(args.features)
-    df = df.replace([np.inf, -np.inf], np.nan)  # new line: replace infinities
-    y = df["y"].astype(int).values
-    X = df.drop(columns=["y"]).values
+    df = df.replace([np.inf, -np.inf], np.nan)
 
-    # Train/test split: 80/20 split, stratified to preserves class balance in both sets
-    Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.2, random_state=0, stratify=y.tolist())
+    # freeze exact feature order (drop meta)
+    feature_cols = [c for c in df.columns if c not in ("qid","split","y")]
+
+    # use baked-in splits
+    train_df = df[df["split"] == "train"].copy()
+    val_df = df[df["split"] == "val"].copy()
+    test_df = df[df["split"] == "test"].copy()
+
+    if train_df.empty or val_df.empty or test_df.empty:
+        raise SystemExit(f"Empty split(s): train={len(train_df)} val={len(val_df)} test={len(test_df)}")
+
+    Xtr, ytr = train_df[feature_cols].values.tolist(), train_df["y"].astype(int).values.tolist()
+    Xva, yva = val_df[feature_cols].values.tolist(), val_df["y"].astype(int).values.tolist()
+    Xte, yte = test_df[feature_cols].values.tolist(), test_df["y"].astype(int).values.tolist()
 
     # Train logistic regression with standard scaling
     pipe = Pipeline([
@@ -52,48 +61,62 @@ def main():
         ))
     ])
     
-    # Fit and evaluate
+    # Fit on TRAIN
     pipe.fit(Xtr, ytr)
-    proba = pipe.predict_proba(Xte)[:, 1]
 
-    # Threshold tuning
+    # Predict VAL and TEST probabilities
+    proba_val = pipe.predict_proba(Xva)[:, 1]
+    proba_te = pipe.predict_proba(Xte)[:, 1]
+
+    # Threshold tuning on VAL (F1)
     ths = [i / 100 for i in range(5, 96)]  # 0.05–0.95
-    best_f1, best_thr = max(
-        (f1_score(yte, (proba >= t).astype(int)), t) for t in ths
+    best_thr, best_f1 = max(
+        ((t, f1_score(yva, (proba_val >= t).astype(int))) for t in ths),
+        key=lambda x: x[1]
     )
-    print(f"Best threshold based on F1: {best_thr:.2f} (F1={best_f1:.3f})")
+    print(f"[VAL] Best threshold by F1: {best_thr:.2f} (F1={best_f1:.3f})")
 
-    thr = best_thr
-    yhat = (proba >= thr).astype(int)
+    # Apply same threshold to VAL and TEST
+    yhat_val = (proba_val >= best_thr).astype(int)
+    yhat_te = (proba_te  >= best_thr).astype(int)
 
-    # Compute metrics
-    auc = roc_auc_score(yte, proba)
-    ap_score = average_precision_score(yte, proba)
-    acc = accuracy_score(yte, yhat)
-    prec, rec, f1, _ = precision_recall_fscore_support(yte, yhat, average="binary", zero_division=0)
+    # Metrics (VAL and TEST)
+    val_auc = roc_auc_score(yva, proba_val); val_ap = average_precision_score(yva, proba_val)
+    val_acc = accuracy_score(yva, yhat_val)
+    val_prec, val_rec, val_f1, _ = precision_recall_fscore_support(yva, yhat_val, average="binary", zero_division=0)
 
-    print(f"AUC={auc:.3f} | AP={ap_score:.3f} | ACC={acc:.3f} | F1={f1:.3f}")
-    print(classification_report(yte, yhat, digits=3))
+    te_auc = roc_auc_score(yte, proba_te); te_ap = average_precision_score(yte, proba_te)
+    te_acc = accuracy_score(yte, yhat_te)
+    te_prec, te_rec, te_f1, _ = precision_recall_fscore_support(yte, yhat_te, average="binary", zero_division=0)
+
+    print(f"[VAL ] AUC={val_auc:.3f} | AP={val_ap:.3f} | ACC={val_acc:.3f} | F1={val_f1:.3f}")
+    print(f"[TEST] AUC={te_auc:.3f} | AP={te_ap:.3f} | ACC={te_acc:.3f} | F1={te_f1:.3f}")
+    print(classification_report(yte, yhat_te, digits=3))
 
     # Build metrics dict for saving
     metrics = {
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "n_train": int(len(ytr)),
-        "n_test": int(len(yte)),
-        "threshold": thr,
-        "auc_roc": float(auc),
-        "avg_precision": float(ap_score),
-        "accuracy": float(acc),
-        "precision": float(prec),
-        "recall": float(rec),
-        "f1": float(f1)
+        "splits": {"train_n": int(len(ytr)), "val_n": int(len(yva)), "test_n": int(len(yte))},
+        "val":  {
+            "auc_roc": float(val_auc), "avg_precision": float(val_ap),
+            "accuracy": float(val_acc), "precision": float(val_prec),
+            "recall": float(val_rec), "f1": float(val_f1)
+        },
+        "test": {
+            "auc_roc": float(te_auc), "avg_precision": float(te_ap),
+            "accuracy": float(te_acc), "precision": float(te_prec),
+            "recall": float(te_rec), "f1": float(te_f1)
+        },
+        "feature_count": len(feature_cols),
+        "feature_names": feature_cols,
+        "threshold": float(best_thr)
     }
 
     # Save model
     joblib.dump(pipe, args.out)
     print(f"Saved model: {args.out}")
-
-    # Save metrics for the model
+    
+    # Save metrics
     metrics_path = args.out.replace(".pkl", ".train_metrics.json")
     with open(metrics_path, "w") as f:
         json.dump(metrics, f, indent=2)

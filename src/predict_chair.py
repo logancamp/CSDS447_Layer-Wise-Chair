@@ -8,12 +8,11 @@ from sklearn.metrics import roc_auc_score, average_precision_score, accuracy_sco
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model_pkl", required=True)
-    ap.add_argument("--preds_jsonl", required=True)
-    ap.add_argument("--features_csv", required=True)
+    ap.add_argument("--features", required=True)
     args = ap.parse_args()
 
     # Load features produced by featurize.py (same schema used for training)
-    df = pd.read_csv(args.features_csv)
+    df = pd.read_csv(args.features)
     X = df.drop(columns=["y"]).values
 
     # Load model and score
@@ -34,7 +33,7 @@ def main():
             "f1": float(f1_score(y_true, y_pred)),
         }
 
-        metrics_path = Path(args.features_csv).with_suffix(".metrics.json")
+        metrics_path = Path(args.features).with_suffix(".metrics.json")
         with open(metrics_path, "w") as f:
             json.dump(metrics, f, indent=2)
         print(f"\nSaved evaluation metrics → {metrics_path}")

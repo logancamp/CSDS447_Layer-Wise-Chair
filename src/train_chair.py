@@ -94,7 +94,7 @@ def main():
     print(f"Saved model: {args.out}")
 
     # Save metrics for the model
-    metrics_path = args.out.replace(".pkl", ".metrics.json")
+    metrics_path = args.out.replace(".pkl", ".train_metrics.json")
     with open(metrics_path, "w") as f:
         json.dump(metrics, f, indent=2)
     print(f"Saved metrics: {metrics_path}")

@@ -87,7 +87,7 @@ def main():
         for y, feats in rows:
             w.writerow([y] + [feats.get(k, 0.0) for k in feat_keys])
 
-    print(f"Wrote features for training: {out}")
+    print(f"Wrote features: {out}")
 
 if __name__ == "__main__":
     main()

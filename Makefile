@@ -24,7 +24,9 @@ train_model_lr: featurize_train_data_lr
 
 predict_test_data_lr: featurize_test_data_lr
 	python src/predict_chair.py \
-	  --model_pkl outputs/chair_clf.pkl \
+	  --model_pkl outputs/chair_classifier.pkl \
+	  --train_metrics outputs/chair_classifier.metrics.jsonl \
+	  --test_data outputs/mc1_results_test.jsonl \
 	  --features outputs/mc1_results_test.features.csv
 
 full_run_lr: setup collect_train_data train_model_lr collect_test_data predict_test_data_lr

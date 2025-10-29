@@ -6,6 +6,7 @@ import torch
 from logit_utils import summarize_logprobs, summarize_entropies, hidden_to_token_logprobs, hidden_to_entropies
 from typing import cast
 from transformers.generation.utils import GenerateDecoderOnlyOutput
+from sklearn.model_selection import train_test_split
 
 """
 SUMMARY:
@@ -21,7 +22,7 @@ SYS = "You are concise and truthful. Answer the question factually and directly.
 def fetch_args():
     ap = argparse.ArgumentParser()
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--offset", type=int, default=0)
+    ap.add_argument("--train", type=bool, default=True, help="If set, use training split; else use test split")
     return ap.parse_args()
 
 # Return the index of the candidate with the highest log-likelihood: Same as TruthfulQA
@@ -46,7 +47,6 @@ def main():
     args = fetch_args()
     # model = "meta-llama/Meta-Llama-3-8B-Instruct"
     model = "meta-llama/Llama-3.2-1B-Instruct"  # smaller for testing
-    limit = 100
     max_new_tokens = 64
 
     # Set up output paths
@@ -70,16 +70,24 @@ def main():
     mdl = AutoModelForCausalLM.from_pretrained(
         model,
         device_map = "auto" if use_cuda else None,
-        torch_dtype = torch.float16 if use_cuda else None,
+        dtype = torch.float16 if use_cuda else None,
     )
     mdl.config.pad_token_id = tok.pad_token_id
-    mdl.eval()
+    mdl.eval()    
+
+    # Load full split once
+    full_ds = load_dataset("truthful_qa", "multiple_choice")["validation"].shuffle(seed=args.seed)
+
+    indices = list(range(len(full_ds)))
+    train_idx, test_idx = train_test_split(indices, test_size=0.1, random_state=args.seed)
+
+    if args.train: 
+        ds = full_ds.select(train_idx) 
+        print(f"Evaluating on {len(ds)} training examples.")
+    else: 
+        ds = full_ds.select(test_idx)
+        print(f"Evaluating on {len(ds)} test examples.")
     
-    # Load the dataset (split, shuffled, sliced)
-    ds = load_dataset("truthful_qa","multiple_choice")["validation"].shuffle(seed=args.seed)
-    start = max(0, args.offset)
-    end = start + limit if limit else len(ds)
-    ds = ds.select(range(start, min(end, len(ds))))
     
     """ Each example in the dataset looks like this:
     {
@@ -102,6 +110,7 @@ def main():
             inputs = {k: v.to(device) for k, v in inputs.items()}  
             
             # Generate output
+            print(f"Processing example {i+1}/{total}...", end="\r")
             with torch.inference_mode():
                 out = mdl.generate(
                     **inputs,
@@ -111,7 +120,6 @@ def main():
                     output_hidden_states=True,
                     return_dict_in_generate=True,
                     use_cache=True,
-                    cache_implementation="dynamic"
                 )
 
             # Process output
@@ -158,7 +166,7 @@ def main():
             # Add an id to make sure each question is uniquely identified
             qid = ex.get("id", None)
             if qid is None:
-                qid = f"val:{start + i}"  # n = 0,1,2... as you iterate
+                qid = f"{'train' if args.train else 'test'}:{i}"
 
             # Store the results for jsonl
             rec = {

@@ -20,8 +20,7 @@ featurize_test_data_lr:
 	python src/featurize.py --preds outputs/mc1_results_test.jsonl --K 18
 
 train_model_lr: featurize_train_data_lr
-	python src/train_chair.py --features outputs/train_run.features.csv \
-	  --out outputs/chair_clf.pkl
+	python src/train_chair.py --features outputs/mc1_results_train.features.csv
 
 predict_test_data_lr: featurize_test_data_lr
 	python src/predict_chair.py \

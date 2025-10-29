@@ -6,7 +6,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import (
     roc_auc_score, average_precision_score, accuracy_score,
-    precision_recall_fscore_support, confusion_matrix, classification_report
+    precision_recall_fscore_support, classification_report
 )
 from sklearn.feature_selection import VarianceThreshold
 from sklearn.linear_model import LogisticRegressionCV
@@ -36,7 +36,6 @@ def main():
     Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.2, random_state=0, stratify=y.tolist())
 
     # Train logistic regression with standard scaling
-    # TODO: expand to an attention-based model like in the paper
     pipe = Pipeline([
         ("imputer", SimpleImputer(strategy="median")),
         ("scaler", StandardScaler(with_mean=True, with_std=True)),
@@ -64,12 +63,11 @@ def main():
 
     # Compute metrics
     auc = roc_auc_score(yte, proba)
-    ap  = average_precision_score(yte, proba)
+    ap_score = average_precision_score(yte, proba)
     acc = accuracy_score(yte, yhat)
     prec, rec, f1, _ = precision_recall_fscore_support(yte, yhat, average="binary", zero_division=0)
-    cm = confusion_matrix(yte, yhat).tolist()
 
-    print(f"AUC={auc:.3f} | AP={ap:.3f} | ACC={acc:.3f} | F1={f1:.3f}")
+    print(f"AUC={auc:.3f} | AP={ap_score:.3f} | ACC={acc:.3f} | F1={f1:.3f}")
     print(classification_report(yte, yhat, digits=3))
 
     # Build metrics dict for saving
@@ -79,12 +77,11 @@ def main():
         "n_test": int(len(yte)),
         "threshold": thr,
         "auc_roc": float(auc),
-        "avg_precision": float(ap),
+        "avg_precision": float(ap_score),
         "accuracy": float(acc),
         "precision": float(prec),
         "recall": float(rec),
-        "f1": float(f1),
-        "confusion_matrix": cm,
+        "f1": float(f1)
     }
 
     # Save model

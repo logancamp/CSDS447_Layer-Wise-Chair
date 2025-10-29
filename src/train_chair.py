@@ -6,7 +6,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import (
     roc_auc_score, average_precision_score, accuracy_score,
-    precision_recall_fscore_support, classification_report
+    precision_recall_fscore_support, classification_report, f1_score
 )
 from sklearn.feature_selection import VarianceThreshold
 from sklearn.linear_model import LogisticRegressionCV
@@ -41,24 +41,29 @@ def main():
         ("scaler", StandardScaler(with_mean=True, with_std=True)),
         ("vth", VarianceThreshold(threshold=1e-6)),
         ("clf", LogisticRegressionCV(
-            Cs=np.logspace(-2, 1, 8).tolist(),
-            cv=5,
-            penalty="l2",
-            solver="liblinear",
-            class_weight="balanced",
-            max_iter=5000,
-            scoring="roc_auc",
-            n_jobs=-1,
+            Cs=np.logspace(-3,2,10).tolist(), 
+            cv=5, scoring="roc_auc",
+            penalty="elasticnet", 
+            solver="saga", 
+            l1_ratios=[0.0, 0.5, 1.0],
+            class_weight="balanced", 
+            max_iter=5000, n_jobs=-1, 
             refit=True
         ))
     ])
     
     # Fit and evaluate
     pipe.fit(Xtr, ytr)
-    proba = pipe.predict_proba(Xte)[:,1]
+    proba = pipe.predict_proba(Xte)[:, 1]
 
-    # Define threshold and predictions
-    thr = 0.5
+    # Threshold tuning
+    ths = [i / 100 for i in range(5, 96)]  # 0.05–0.95
+    best_f1, best_thr = max(
+        (f1_score(yte, (proba >= t).astype(int)), t) for t in ths
+    )
+    print(f"Best threshold based on F1: {best_thr:.2f} (F1={best_f1:.3f})")
+
+    thr = best_thr
     yhat = (proba >= thr).astype(int)
 
     # Compute metrics

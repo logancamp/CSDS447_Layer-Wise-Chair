@@ -6,7 +6,6 @@ import torch
 from logit_utils import summarize_logprobs, summarize_entropies, hidden_to_token_logprobs, hidden_to_entropies
 from typing import cast
 from transformers.generation.utils import GenerateDecoderOnlyOutput
-from sklearn.model_selection import train_test_split
 
 """
 SUMMARY:
@@ -57,6 +56,11 @@ def main():
     met_path = outdir / f"{outname}.metrics.json"
     stamp = time.strftime("%Y%m%d-%H%M%S")
     
+    # Set random seed
+    torch.manual_seed(args.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(args.seed)
+        
     # Check if cuda is available for device
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
@@ -135,19 +139,27 @@ def main():
             num_layers = len(steps[0])
             hist_start, hist_end = 1, FINAL_L
             
-            layer_data = []
-            for li in range(hist_start, hist_end): # skip final layer and embedding layer
-                ent = hidden_to_entropies(steps, mdl, layer=li)
-                lp  = hidden_to_token_logprobs(steps, mdl, gen_ids, layer=li)
-                layer_data.append((ent, lp))
+            ent_layers = []
+            lp_layers = []
+            for li in range(hist_start, hist_end):
+                ent_layers.append(hidden_to_entropies(steps, mdl, layer=li))
+                lp_layers.append(hidden_to_token_logprobs(steps, mdl, gen_ids, layer=li))
+                
+            if ent_layers == [] or lp_layers == []: # gaurd against no entropies/logprobs
+                assert False, "No entropy or logprobs found."
 
-            # Summarize historical data per layer
-            hist_entropies = []
-            hist_logprobs = []
-            for thing in layer_data:
-                entropies, logprobs = thing
-                hist_entropies.append(summarize_entropies(entropies))
-                hist_logprobs.append(summarize_logprobs(logprobs))
+            # Summarize historical data across layers
+            # Updated from simple summaries per layer to across layers to be CHAIRS-style      
+            T = len(last_lp_seq) # number of generated tokens
+            chair_token_traces = []
+            for t in range(T):
+                ent_trace = [ent_layers[L][t] for L in range(len(ent_layers))]
+                lp_trace = [lp_layers[L][t]  for L in range(len(lp_layers))]
+                chair_token_traces.append({
+                    "t": t,
+                    "ent_summary": summarize_entropies(ent_trace), # {mean,std,min,max,slope}
+                    "lp_summary": summarize_logprobs(lp_trace),
+                })
 
             # Pick an answer based on log-likeihood and check if it's correct
             choices = ex["mc1_targets"]["choices"]
@@ -159,7 +171,7 @@ def main():
             # Add an id to make sure each question is uniquely identified
             qid = ex.get("id", None)
             if qid is None:
-                qid = f"{'train' if args.train else 'test'}:{i}"
+                qid = f"{args.subset}:{i}"
 
             # Store the results for jsonl
             rec = {
@@ -171,19 +183,12 @@ def main():
                 "generated": gen_text[0],
                 "pred_index": guess,
                 "pred_text": choices[guess],
-                "correct": bool(is_correct),
+                "correct": is_correct,
+                "hallucination": not is_correct,
                 "num_layers_total": num_layers,
                 "historical_layer_range": [hist_start, hist_end],
+                "chair_token_traces": chair_token_traces # per-token summaries across historical layers (used to be "historical_layers")
             }
-            historical_layers = [
-                {
-                    "layer": i+1,
-                    "ent_summary": ent,
-                    "lp_summary": lp
-                }
-                for i, (ent, lp) in enumerate(zip(hist_entropies, hist_logprobs))
-            ]
-            rec["historical_layers"] = historical_layers
 
             # Create json for last layer info
             rec["last_layer"] = {

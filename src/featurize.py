@@ -13,7 +13,6 @@ Used by train_chair for classifier training and analysis.
 def fetch_args():
     ap = argparse.ArgumentParser()
     ap.add_argument("--preds", required=True, help="outputs/*.jsonl from eval_mc1")
-    ap.add_argument("--out", default="", help="out CSV path")
     ap.add_argument("--K", type=int, default=16, help="tail length for token logprob sequence")
     return ap.parse_args()
     
@@ -26,41 +25,36 @@ def pad_tail(xs, k, pad=0.0):
 # Extract features from a single record (default K=32 tokens)
 def row_from_record(r, K=32):
     # Label: 1 = hallucination (wrong), 0 = correct
-    y = int(r.get("hallucination", not r.get("correct", False)))
+    y = int(r["hallucination"])
     
     # Scalar summaries from eval_mc1
     feats = {}
-    hist = sorted(r.get("historical_layers", []), key=lambda d: d.get("layer", 0))
-    for item in hist:
-        L = item.get("layer")
-        lp = item.get("lp_summary", {})
-        en = item.get("ent_summary", {})
-        # Separate features for logprobs and entropies
-        for k, v in lp.items():
-            feats[f"layer{L}_lp_{k}"] = float(v)
-        for k, v in en.items():
-            feats[f"layer{L}_ent_{k}"] = float(v)
+    traces = sorted(r.get("chair_token_traces", []), key=lambda d: d.get("t", 0))
+    stats = ("mean", "std", "min", "max", "slope")
+    for item in stats:
+        lp_seq = [float((tok.get("lp_summary")  or {}).get(item, 0.0)) for tok in traces]
+        ent_seq = [float((tok.get("ent_summary") or {}).get(item, 0.0)) for tok in traces]
+
+        # fixed-length tails
+        lp_seq = pad_tail(lp_seq, K, 0.0)
+        ent_seq = pad_tail(ent_seq, K, 0.0)
+
+        for i, v in enumerate(lp_seq, 1):
+            feats[f"lp_{item}_tail_{i}"] = v
+        for i, v in enumerate(ent_seq, 1):
+            feats[f"ent_{item}_tail_{i}"] = v
     
     # Last layer token sequences (padded/truncated to K)
     last = r.get("last_layer", {})
-    lp_seq  = pad_tail(last.get("logprobs_seq", []), K, 0.0)
+    lp_seq = pad_tail(last.get("logprobs_seq", []), K, 0.0)
     ent_seq = pad_tail(last.get("entropies_seq", []), K, 0.0)
     
-    # For logistic model
+    # For logistic model - add raw sequences as features per column
     for i, v in enumerate(lp_seq, 1):
         feats[f"last_lp_tail_{i}"] = float(v)
     for i, v in enumerate(ent_seq, 1):
         feats[f"last_ent_tail_{i}"] = float(v)
-    
-    # Add overlap features if present (from tagged file)
-    for k in ["overlap_pred", "overlap_correct", "overlap_max_distractor"]:
-        if k in r:
-            feats[k] = float(r[k])
             
-    # For when we change to the attention model
-    # feats["last_lp_tail_vec"]  = list(lp_seq)
-    # feats["last_ent_tail_vec"] = list(ent_seq)
-        
     return y, feats
 
 def main():
@@ -68,12 +62,11 @@ def main():
 
     # Set up paths
     src = Path(args.preds)
-    out = Path(args.out) if args.out else src.with_suffix(".features.csv")
+    out = src.with_suffix(".features.csv")
 
     # Read input, extract features, write CSV
     rows = []
     all_keys = set()
-
     with open(src, "r", encoding="utf-8") as f_in:
         for line in f_in:
             line = line.strip()

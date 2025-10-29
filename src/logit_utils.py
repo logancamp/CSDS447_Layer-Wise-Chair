@@ -22,18 +22,37 @@ def hidden_to_token_logprobs(steps, mdl, gen_ids, layer=-1):
         logps.append(lp)
     return logps
 
-def summarize_logprobs(logps):
-    if not logps:
-        return {"avg_logprob": 0.0, "avg_prob": 0.0, "perplexity": float("inf")}
-    avg_lp = sum(logps) / len(logps)
-    return {"avg_logprob": avg_lp, "avg_prob": math.exp(avg_lp), "perplexity": math.exp(-avg_lp)}
+def _slope(xs):
+    if len(xs) <= 1:
+        return 0.0
+    return (xs[-1] - xs[0]) / (len(xs) - 1)
+
+def summarize_logprobs(xs):
+    #CHAIR-style summary over logits/logprobs across layers.
+    if not xs:
+        return {"mean": 0.0, "std": 0.0, "min": 0.0, "max": 0.0, "slope": 0.0}
+    m = sum(xs) / len(xs)
+    v = sum((x - m) ** 2 for x in xs) / len(xs)
+    return {
+        "mean": m,
+        "std": v ** 0.5,
+        "min": min(xs),
+        "max": max(xs),
+        "slope": _slope(xs),
+    }
 
 def summarize_entropies(xs):
     if not xs:
-        return {"mean":0.0,"std":0.0,"min":0.0,"max":0.0,"first":0.0,"last":0.0,"delta":0.0}
-    m = sum(xs)/len(xs)
-    v = sum((x-m)**2 for x in xs)/len(xs)
-    return {"mean":m,"std":v**0.5,"min":min(xs),"max":max(xs),"first":xs[0],"last":xs[-1],"delta":xs[-1]-xs[0]}
+        return {"mean": 0.0, "std": 0.0, "min": 0.0, "max": 0.0, "slope": 0.0}
+    m = sum(xs) / len(xs)
+    v = sum((x - m) ** 2 for x in xs) / len(xs)
+    return {
+        "mean": m,
+        "std": v ** 0.5,
+        "min": min(xs),
+        "max": max(xs),
+        "slope": _slope(xs),
+    }
 
 def hidden_to_entropies(steps, mdl, layer=-1):
     ents = []

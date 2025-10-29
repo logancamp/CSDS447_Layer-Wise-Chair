@@ -3,6 +3,7 @@ setup:
 	export TOKENIZERS_PARALLELISM=false
 	mkdir -p outputs
 
+
 # --- Data Collection (Shared) ---
 collect_train_data: setup
 	python src/eval_mc1.py --seed 42 --subset train
@@ -10,27 +11,17 @@ collect_train_data: setup
 collect_test_data: setup
 	python src/eval_mc1.py --seed 42 --subset test
 
-# --- Tagging (Shared) ---
-tag_train_data:
-	python src/tag_mc1.py --preds outputs/train_run.jsonl
-
-tag_test_data:
-	python src/tag_mc1.py --preds outputs/eval_run.jsonl
-
 
 # --- V1: Logistic Regression Pipeline ---
-
 featurize_train_data_lr:
-	python src/featurize.py --preds outputs/train_run.tagged.jsonl --K 18 \
-	  --out outputs/train_run.features.csv
+	python src/featurize.py --preds outputs/mc1_results_train.jsonl --K 18
+
+featurize_test_data_lr:
+	python src/featurize.py --preds outputs/mc1_results_test.jsonl --K 18
 
 train_model_lr: featurize_train_data_lr
 	python src/train_chair.py --features outputs/train_run.features.csv \
 	  --out outputs/chair_clf.pkl
-
-featurize_test_data_lr:
-	python src/featurize.py --preds outputs/eval_run.tagged.jsonl --K 18 \
-	  --out outputs/eval_run.features.csv
 
 predict_test_data_lr: featurize_test_data_lr
 	python src/predict_chair.py \
@@ -38,11 +29,10 @@ predict_test_data_lr: featurize_test_data_lr
 	  --preds_jsonl outputs/eval_run.jsonl \
 	  --features_csv outputs/eval_run.features.csv
 
-full_run_lr: setup collect_train_data tag_train_data train_model_lr collect_test_data tag_test_data predict_test_data_lr
+full_run_lr: setup collect_train_data train_model_lr collect_test_data predict_test_data_lr
 
 
 # --- V2: Neural Network (NN) Pipeline ---
-
 featurize_train_data_nn:
 	python src/featurize_nn.py --preds outputs/train_run.tagged.jsonl --K 32 \
 	  --out outputs/train_run.features.jsonl
@@ -61,7 +51,7 @@ predict_test_data_nn: featurize_test_data_nn
 	  --preds_jsonl outputs/eval_run.jsonl \
 	  --features_jsonl outputs/eval_run.features.jsonl
 
-full_run_nn: setup collect_train_data tag_train_data train_model_nn collect_test_data tag_test_data predict_test_data_nn
+full_run_nn: setup collect_train_data train_model_nn collect_test_data predict_test_data_nn
 
 
 # --- Aliases ---

@@ -14,6 +14,7 @@ def fetch_args():
     ap = argparse.ArgumentParser()
     ap.add_argument("--preds", required=True, help="outputs/*.jsonl from eval_mc1")
     ap.add_argument("--K", type=int, default=16, help="tail length for token logprob sequence")
+    ap.add_argument("--tmodel", default="lr", help="model being trained (lr vs nn)")
     return ap.parse_args()
     
 # Normalize and pad/truncate the last layer tokens
@@ -23,7 +24,7 @@ def pad_tail(xs, k, pad=0.0):
     return xs
 
 # Extract features from a single record (default K=16 tokens)
-def row_from_record(r, K=16):
+def row_from_record(tmodel, r, K=16):
     # Label: 1 = hallucination (wrong), 0 = correct
     y = int(r["hallucination"])
     
@@ -57,11 +58,18 @@ def row_from_record(r, K=16):
     lp_seq = pad_tail(last.get("logprobs_seq", []), K, 0.0)
     ent_seq = pad_tail(last.get("entropies_seq", []), K, 0.0)
     
-    # For logistic model - add raw sequences as features per column
-    for i, v in enumerate(lp_seq, 1):
-        feats[f"last_lp_tail_{i}"] = float(v)
-    for i, v in enumerate(ent_seq, 1):
-        feats[f"last_ent_tail_{i}"] = float(v)
+    if tmodel == "nn":
+        # For neural net model - add raw sequences as vector features
+        feats = {
+            "last_lp_tail_vec": [float(v) for v in lp_seq],
+            "last_ent_tail_vec": [float(v) for v in ent_seq]
+        }
+    else:
+        # For logistic model - add raw sequences as features per column
+        for i, v in enumerate(lp_seq, 1):
+            feats[f"last_lp_tail_{i}"] = float(v)
+        for i, v in enumerate(ent_seq, 1):
+            feats[f"last_ent_tail_{i}"] = float(v)
             
     return y, feats, {"qid": qid, "split": split}
 
@@ -81,7 +89,7 @@ def main():
             if not line: 
                 continue
             r = json.loads(line)
-            y, feats, meta = row_from_record(r, args.K)
+            y, feats, meta = row_from_record(args.tmodel, r, args.K)
             rows.append((y, feats, meta))
             all_keys |= feats.keys()
 

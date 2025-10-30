@@ -11,7 +11,7 @@ collect_data:
 
 # --- V1: Logistic Regression Pipeline ---
 featurize_data_lr:
-	python src/featurize.py --preds outputs/mc1_results.jsonl --K 18
+	python src/featurize.py --tmodel lr --preds outputs/mc1_results.jsonl --K 18
 
 train_model_lr:
 	python src/train_chair.py --features outputs/mc1_results.features.csv
@@ -27,25 +27,19 @@ full_run_lr: setup collect_data featurize_data_lr train_model_lr predict_lr
 
 
 # --- V2: Neural Network (NN) Pipeline ---
-featurize_train_data_nn:
-	python src/featurize_nn.py --preds outputs/train_run.tagged.jsonl --K 32 \
-	  --out outputs/train_run.features.jsonl
+featurize_data_nn:
+	python src/featurize.py --tmodel nn --preds outputs/mc1_results.jsonl --K 32 \
 
-train_model_nn: featurize_train_data_nn
-	python src/train_chair_nn.py --features outputs/train_run.features.jsonl \
-	  --out outputs/chair_nn.pth --epochs 10
+train_model_nn:
+	python src/train_chair_nn.py --features outputs/mc1_results.features.csv --epochs 10
 
-featurize_test_data_nn:
-	python src/featurize_nn.py --preds outputs/eval_run.tagged.jsonl --K 32 \
-	  --out outputs/eval_run.features.jsonl
-
-predict_test_data_nn: featurize_test_data_nn
+predict_nn:
 	python src/predict_chair_nn.py \
 	  --model_path outputs/chair_nn.pth \
 	  --preds_jsonl outputs/eval_run.jsonl \
 	  --features_jsonl outputs/eval_run.features.jsonl
 
-full_run_nn: setup collect_train_data train_model_nn collect_test_data predict_test_data_nn
+full_run_nn: setup collect_data featurize_data_nn train_model_nn predict_nn
 
 
 # --- Aliases ---

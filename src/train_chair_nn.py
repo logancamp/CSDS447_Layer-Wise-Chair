@@ -22,7 +22,7 @@ and trains the model, saving the best checkpoint.
 
 def fetch_args():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--features", required=True, help="Path to features.jsonl file from featurize_nn.py")
+    ap.add_argument("--features", required=True, help="Path to features .csv file from featurize.py")
     ap.add_argument("--out", default="outputs/chair_nn.pth", help="Path to save the trained model")
     ap.add_argument("--epochs", type=int, default=10)
     ap.add_argument("--batch_size", type=int, default=32)
@@ -48,6 +48,7 @@ def main():
     print(f"Using device: {device}")
 
     # --- 1. Load Metadata ---
+    #TODO: Redo dataloading and split to be consistent with new data - mimic train_chair.py
     meta_path = Path(args.features).with_suffix(".meta.json")
     if not meta_path.exists():
         print(f"Error: Could not find metadata file at {meta_path}")

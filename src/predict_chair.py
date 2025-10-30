@@ -97,7 +97,7 @@ def main():
     else:
         by_qid = None
 
-    scores_csv = Path(args.features).with_suffix(".chair_scores.csv")
+    scores_csv = args.features.replace(".features", ".chair_scores.csv")
     with open(scores_csv, "w", newline="", encoding="utf-8") as f_out:
         w = csv.writer(f_out)
         w.writerow(["qid","predicted","score","question","true_answer","predicted_answer","correct"])

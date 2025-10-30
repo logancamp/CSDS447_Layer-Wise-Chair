@@ -5,7 +5,7 @@ setup:
 
 
 # --- Data Collection (Shared) ---
-collect_data: setup
+collect_data:
 	python src/eval_mc1.py --seed 42
 
 
@@ -13,17 +13,17 @@ collect_data: setup
 featurize_data_lr:
 	python src/featurize.py --preds outputs/mc1_results.jsonl --K 18
 
-train_model_lr: featurize_data_lr
+train_model_lr:
 	python src/train_chair.py --features outputs/mc1_results.features.csv
 
-predict_lr: featurize_data_lr
+predict_lr:
 	python src/predict_chair.py \
 	  --model_pkl outputs/chair_classifier.pkl \
 	  --train_metrics outputs/chair_classifier.train_metrics.json \
 	  --test_data outputs/mc1_results.jsonl \
 	  --features outputs/mc1_results.features.csv
 
-full_run_lr: setup collect_data train_model_lr predict_lr
+full_run_lr: setup collect_data featurize_data_lr train_model_lr predict_lr
 
 
 # --- V2: Neural Network (NN) Pipeline ---

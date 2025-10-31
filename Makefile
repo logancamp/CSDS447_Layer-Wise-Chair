@@ -18,8 +18,8 @@ train_model_lr:
 
 predict_lr:
 	python src/predict_chair.py \
-	  --model_pkl outputs/chair_classifier.pkl \
-	  --train_metrics outputs/chair_classifier.train_metrics.json \
+	  --model_pkl outputs/chair_classifier_lr.pkl \
+	  --train_metrics outputs/chair_classifier_lr.train_metrics.json \
 	  --test_data outputs/mc1_results.jsonl \
 	  --features outputs/mc1_results.features.csv
 
@@ -32,7 +32,7 @@ train_model_nn:
 
 predict_nn:
 	python src/predict_chair_nn.py \
-	  --model_pth outputs/chair_nn.pth \
+	  --model_pth outputs/chair_classifier_nn.pth \
 	  --test_data outputs/mc1_results.jsonl \
 	  --features outputs/mc1_results.features.csv
 

@@ -22,7 +22,7 @@ def main():
     # Add command-line args
     ap = argparse.ArgumentParser()
     ap.add_argument("--features", required=True) # CSV from featurize.py
-    ap.add_argument("--out", default="outputs/chair_classifier.pkl") # clf model output path
+    ap.add_argument("--out", default="outputs/chair_classifier_lr.pkl") # clf model output path
     args = ap.parse_args()
 
     # Load features

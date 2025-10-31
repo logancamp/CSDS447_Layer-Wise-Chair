@@ -1,70 +1,45 @@
 # --- Setup ---
 setup:
 	export TOKENIZERS_PARALLELISM=false
-	export CHAIR_MODEL="TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 	mkdir -p outputs
 
+
 # --- Data Collection (Shared) ---
-collect_train_data: setup
-	python src/eval_mc1.py --split validation --limit 500 --max_new_tokens 64 \
-	  --outname train_run ${CHAIR_MODEL:+--model "$CHAIR_MODEL"}
-
-collect_test_data: setup
-	python src/eval_mc1.py --split validation --offset 500 --limit 200 --max_new_tokens 64 \
-	  --outname eval_run ${CHAIR_MODEL:+--model "$CHAIR_MODEL"}
-
-# --- Tagging (Shared, Optional) ---
-tag_train_data:
-	python src/tag_mc1.py --preds outputs/train_run.jsonl
-
-tag_test_data:
-	python src/tag_mc1.py --preds outputs/eval_run.jsonl
+collect_data:
+	python src/eval_mc1.py --seed 42
 
 
 # --- V1: Logistic Regression Pipeline ---
+featurize_data_lr:
+	python src/featurize.py --tmodel lr --preds outputs/mc1_results.jsonl --K 18
 
-featurize_train_data_lr:
-	python src/featurize.py --preds outputs/train_run.jsonl --K 32 \
-	  --out outputs/train_run.features.csv
+train_model_lr:
+	python src/train_chair_lr.py --features outputs/mc1_results.features.csv
 
-train_model_lr: featurize_train_data_lr
-	python src/train_chair.py --features outputs/train_run.features.csv \
-	  --out outputs/chair_clf.pkl
+predict_lr:
+	python src/predict_chair_lr.py \
+	  --model_pkl outputs/chair_classifier_lr.pkl \
+	  --train_metrics outputs/chair_classifier_lr.train_metrics.json \
+	  --test_data outputs/mc1_results.jsonl \
+	  --features outputs/mc1_results.features.csv
 
-featurize_test_data_lr:
-	python src/featurize.py --preds outputs/eval_run.jsonl --K 32 \
-	  --out outputs/eval_run.features.csv
-
-predict_test_data_lr: featurize_test_data_lr
-	python src/predict_chair.py \
-	  --model_pkl outputs/chair_clf.pkl \
-	  --preds_jsonl outputs/eval_run.jsonl \
-	  --features_csv outputs/eval_run.features.csv
-
-full_run_lr: setup collect_train_data tag_train_data train_model_lr collect_test_data tag_test_data predict_test_data_lr
+full_run_lr: setup collect_data featurize_data train_model_lr predict_lr
 
 
 # --- V2: Neural Network (NN) Pipeline ---
+featurize_data_nn:
+	python src/featurize.py --tmodel nn --preds outputs/mc1_results.jsonl --K 32
 
-featurize_train_data_nn:
-	python src/featurize_nn.py --preds outputs/train_run.jsonl --K 32 \
-	  --out outputs/train_run.features.jsonl
+train_model_nn:
+	python src/train_chair_nn.py --features outputs/mc1_results.features.csv --epochs 10
 
-train_model_nn: featurize_train_data_nn
-	python src/train_chair_nn.py --features outputs/train_run.features.jsonl \
-	  --out outputs/chair_nn.pth --epochs 10
-
-featurize_test_data_nn:
-	python src/featurize_nn.py --preds outputs/eval_run.jsonl --K 32 \
-	  --out outputs/eval_run.features.jsonl
-
-predict_test_data_nn: featurize_test_data_nn
+predict_nn:
 	python src/predict_chair_nn.py \
-	  --model_path outputs/chair_nn.pth \
-	  --preds_jsonl outputs/eval_run.jsonl \
-	  --features_jsonl outputs/eval_run.features.jsonl
+	  --model_pth outputs/chair_classifier_nn.pth \
+	  --test_data outputs/mc1_results.jsonl \
+	  --features outputs/mc1_results.features.csv
 
-full_run_nn: setup collect_train_data tag_train_data train_model_nn collect_test_data tag_test_data predict_test_data_nn
+full_run_nn: setup collect_data featurize_data train_model_nn predict_nn
 
 
 # --- Aliases ---

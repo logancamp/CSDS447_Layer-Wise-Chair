@@ -51,7 +51,7 @@ Are we able to detect these hallucinations earlier rather than only in the last 
 - Lastly we will attempt classification at each layer to track hallucinations throughout the process of generation for better explainability for LLM hallucination early detection.
 <br><br>
 
-## Last resort potential solution:
+## Last Resort, Potential Solution:
 - Statistical analysis on layer features rather than model prediction
   - Mean difference per layer
   - T-test to check if the difference is statistically significant or random

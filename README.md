@@ -13,13 +13,15 @@ TinyLLAMA (current): https://huggingface.co/TinyLlama/TinyLlama-1.1B-Chat-v1.0 <
 <br>
 
 TruthfulQA: https://github.com/sylinrl/TruthfulQA <br>
-MMLU: https://github.com/hendrycks/test?tab=readme-ov-file <br>
+MMLU: https://github.com/hendrycks/test?tab=readme-ov-file
+<br><br>
 
 ## Baseline + Methodology
 Our benchmarks are the hallucination detection outputs. We detect these by comparing TruthfulQA multiple choice responses with generated outputs. Currently this is a log-likelihood function the same as TruthfulQA.
 
 ## Goal:
 Are we able to detect these hallucinations earlier rather than only in the last layer as CHAIR and other detection methods employ?
+<br><br>
 
 ## Architecture:
 - 70/20/10 split training/validation/test data
@@ -47,6 +49,7 @@ Are we able to detect these hallucinations earlier rather than only in the last 
   - Create more data with appended re-questioning (may cause messy data)
 - After we will adjust our dataset to include partially completed layer data - or collect per layer data and train per layer to learn internal patterns. <br>
 - Lastly we will attempt classification at each layer to track hallucinations throughout the process of generation for better explainability for LLM hallucination early detection.
+<br><br>
 
 ## Last resort potential solution:
 - Statistical analysis on layer features rather than model prediction

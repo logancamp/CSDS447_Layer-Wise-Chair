@@ -4,13 +4,20 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
-from sklearn.pipeline import Pipeline
+# from sklearn.pipeline import Pipeline
 from sklearn.metrics import (
     roc_auc_score, average_precision_score, accuracy_score,
-    precision_recall_fscore_support, classification_report, f1_score
+    precision_recall_fscore_support, classification_report,
+    balanced_accuracy_score
 )
 from sklearn.feature_selection import VarianceThreshold
 from sklearn.linear_model import LogisticRegressionCV
+import warnings
+from sklearn.exceptions import ConvergenceWarning
+warnings.filterwarnings("ignore", category=ConvergenceWarning)
+
+from imblearn.over_sampling import SMOTE
+from imblearn.pipeline import Pipeline
 
 """
 SUMMARY:
@@ -47,19 +54,40 @@ def main():
     # Train logistic regression with standard scaling
     pipe = Pipeline([
         ("imputer", SimpleImputer(strategy="median")),
-        ("scaler", StandardScaler(with_mean=True, with_std=True)),
         ("vth", VarianceThreshold(threshold=1e-6)),
+        ("scaler", StandardScaler(with_mean=True, with_std=True)),
+        ("smote", SMOTE(sampling_strategy="auto", random_state=42)),
         ("clf", LogisticRegressionCV(
-            Cs=np.logspace(-3,2,10).tolist(), 
-            cv=5, scoring="roc_auc",
-            penalty="elasticnet", 
-            solver="saga", 
-            l1_ratios=[0.0, 0.5, 1.0],
-            class_weight="balanced", 
-            max_iter=5000, n_jobs=-1, 
+            Cs=np.logspace(-4, 0, 6).tolist(),
+            cv=5,
+            scoring="average_precision",
+            penalty="elasticnet",
+            solver="saga",
+            l1_ratios=[0.5, 1.0],
+            class_weight=None,
+            max_iter=20000,
+            n_jobs=-1,
             refit=True
         ))
     ])
+    
+    # Set class weights manually
+    """pipe.named_steps["clf"].class_weight = {0: len(ytr)/sum(np.array(ytr)==0), 1: len(ytr)/sum(np.array(ytr)==1)}"""    
+    
+    # Downsample majority class in TRAIN only
+    """ from sklearn.utils import resample
+    maj = train_df[train_df.y == 0]
+    minr = train_df[train_df.y == 1]
+
+    if len(maj) > len(minr):
+        maj_down = pd.DataFrame(resample(maj, replace=False, n_samples=len(minr), random_state=0))
+        train_df = pd.concat([maj_down, minr], ignore_index=True)
+    else:
+        minr_down = pd.DataFrame(resample(minr, replace=False, n_samples=len(maj), random_state=0))
+        train_df = pd.concat([maj, minr_down], ignore_index=True)
+        
+    Xtr = train_df[feature_cols].values.tolist()
+    ytr = train_df["y"].astype(int).values.tolist() """
     
     # Fit on TRAIN
     pipe.fit(Xtr, ytr)
@@ -69,12 +97,12 @@ def main():
     proba_te = pipe.predict_proba(Xte)[:, 1]
 
     # Threshold tuning on VAL (F1)
-    ths = [i / 100 for i in range(5, 96)]  # 0.05–0.95
-    best_thr, best_f1 = max(
-        ((t, f1_score(yva, (proba_val >= t).astype(int))) for t in ths),
+    ths = [i/100 for i in range(5, 96)]  # 0.05–0.95
+    best_thr, best_bal = max(
+        ((t, balanced_accuracy_score(yva, (proba_val >= t).astype(int))) for t in ths),
         key=lambda x: x[1]
     )
-    print(f"[VAL] Best threshold by F1: {best_thr:.2f} (F1={best_f1:.3f})")
+    print(f"[VAL] Best threshold by Balanced Accuracy: {best_thr:.2f} (BalAcc={best_bal:.3f})")
 
     # Apply same threshold to VAL and TEST
     yhat_val = (proba_val >= best_thr).astype(int)

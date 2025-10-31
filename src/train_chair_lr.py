@@ -1,24 +1,24 @@
 import argparse, joblib, json, time
-from pathlib import Path
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
-# from sklearn.pipeline import Pipeline
+from sklearn.feature_selection import VarianceThreshold
+from sklearn.linear_model import LogisticRegressionCV, LogisticRegression
+from sklearn.model_selection import GridSearchCV, StratifiedKFold
+from imblearn.over_sampling import SMOTE
 from sklearn.metrics import (
     roc_auc_score, average_precision_score, accuracy_score,
     precision_recall_fscore_support, classification_report,
-    balanced_accuracy_score
+    balanced_accuracy_score, make_scorer
 )
-from sklearn.feature_selection import VarianceThreshold
-from sklearn.linear_model import LogisticRegressionCV
+
+# from sklearn.pipeline import Pipeline
+from imblearn.pipeline import Pipeline
+
 import warnings
 from sklearn.exceptions import ConvergenceWarning
 warnings.filterwarnings("ignore", category=ConvergenceWarning)
-
-from imblearn.over_sampling import SMOTE
-from imblearn.pipeline import Pipeline
-
 """
 SUMMARY:
 Train a logistic regression classifier to detect hallucinations based on features extracted by featurize.py.
@@ -51,12 +51,38 @@ def main():
     Xva, yva = val_df[feature_cols].values.tolist(), val_df["y"].astype(int).values.tolist()
     Xte, yte = test_df[feature_cols].values.tolist(), test_df["y"].astype(int).values.tolist()
 
+    #############################################################
+    #############################################################
+    # Define pipeline with SMOTE and logistic regression
+    """ pipe = Pipeline([
+        ("imputer", SimpleImputer(strategy="median")),
+        ("vth", VarianceThreshold(threshold=1e-6)),
+        ("scaler", StandardScaler(with_mean=True, with_std=True)),
+        ("smote", SMOTE(random_state=42)),
+        ("clf", LogisticRegression(
+            penalty="elasticnet", 
+            solver="saga", 
+            l1_ratio=0.5,
+            max_iter=20000
+        )),
+    ])
+
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    scoring = make_scorer(average_precision_score, response_method="predict_proba")
+    param_grid = {
+        "smote__sampling_strategy": [0.5, 0.7, 0.9, 1.0],
+        "smote__k_neighbors": [1, 3],
+        "clf__C": np.logspace(-4, 0, 6).tolist(),
+        "clf__l1_ratio": [0.5, 1.0],
+        "clf__class_weight": [None, "balanced"],
+    }
+    gs = GridSearchCV(pipe, param_grid, cv=cv, scoring=scoring, n_jobs=-1, refit=True) """
+    #############################################################
     # Train logistic regression with standard scaling
     pipe = Pipeline([
         ("imputer", SimpleImputer(strategy="median")),
         ("vth", VarianceThreshold(threshold=1e-6)),
         ("scaler", StandardScaler(with_mean=True, with_std=True)),
-        ("smote", SMOTE(sampling_strategy="auto", random_state=42)),
         ("clf", LogisticRegressionCV(
             Cs=np.logspace(-4, 0, 6).tolist(),
             cv=5,
@@ -70,6 +96,7 @@ def main():
             refit=True
         ))
     ])
+    #############################################################
     
     # Set class weights manually
     """pipe.named_steps["clf"].class_weight = {0: len(ytr)/sum(np.array(ytr)==0), 1: len(ytr)/sum(np.array(ytr)==1)}"""    
@@ -88,10 +115,18 @@ def main():
         
     Xtr = train_df[feature_cols].values.tolist()
     ytr = train_df["y"].astype(int).values.tolist() """
-    
-    # Fit on TRAIN
+    #############################################################
+        
+    # for simple pipeline
     pipe.fit(Xtr, ytr)
-
+    
+    # for grid search pipeline with smote
+    # gs.fit(Xtr, ytr)
+    # pipe = gs.best_estimator_
+    
+    #############################################################
+    #############################################################
+    
     # Predict VAL and TEST probabilities
     proba_val = pipe.predict_proba(Xva)[:, 1]
     proba_te = pipe.predict_proba(Xte)[:, 1]

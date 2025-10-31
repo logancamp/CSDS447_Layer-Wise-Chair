@@ -60,7 +60,13 @@ def main():
         sys.exit(1)
 
     # --- Load Prediction Data from CSV ---
-    X = torch.tensor(cdf[scalar_feature_names].values, dtype=torch.float32)
+    X = torch.tensor(
+        cdf[scalar_feature_names]
+        .apply(pd.to_numeric, errors="coerce")
+        .replace([np.inf, -np.inf], np.nan)
+        .fillna(0.0)
+        .to_numpy(dtype=np.float32, copy=False)
+    )
     y = torch.tensor(cdf["y"].astype(int).values, dtype=torch.float32)
     lp = torch.zeros((X.size(0), K), dtype=torch.float32)   # dummy logprob seq
     ent = torch.zeros((X.size(0), K), dtype=torch.float32)   # dummy entropy seq

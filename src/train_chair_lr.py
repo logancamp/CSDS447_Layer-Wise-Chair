@@ -54,7 +54,7 @@ def main():
     #############################################################
     #############################################################
     # Define pipeline with SMOTE and logistic regression
-    """ pipe = Pipeline([
+    pipe = Pipeline([
         ("imputer", SimpleImputer(strategy="median")),
         ("vth", VarianceThreshold(threshold=1e-6)),
         ("scaler", StandardScaler(with_mean=True, with_std=True)),
@@ -76,10 +76,10 @@ def main():
         "clf__l1_ratio": [0.5, 1.0],
         "clf__class_weight": [None, "balanced"],
     }
-    gs = GridSearchCV(pipe, param_grid, cv=cv, scoring=scoring, n_jobs=-1, refit=True) """
+    gs = GridSearchCV(pipe, param_grid, cv=cv, scoring=scoring, n_jobs=-1, refit=True)
     #############################################################
     # Train logistic regression with standard scaling
-    pipe = Pipeline([
+    """ pipe = Pipeline([
         ("imputer", SimpleImputer(strategy="median")),
         ("vth", VarianceThreshold(threshold=1e-6)),
         ("scaler", StandardScaler(with_mean=True, with_std=True)),
@@ -95,7 +95,7 @@ def main():
             n_jobs=-1,
             refit=True
         ))
-    ])
+    ]) """
     #############################################################
     
     # Set class weights manually
@@ -118,11 +118,11 @@ def main():
     #############################################################
         
     # for simple pipeline
-    pipe.fit(Xtr, ytr)
+    # pipe.fit(Xtr, ytr)
     
     # for grid search pipeline with smote
-    # gs.fit(Xtr, ytr)
-    # pipe = gs.best_estimator_
+    gs.fit(Xtr, ytr)
+    pipe = gs.best_estimator_
     
     #############################################################
     #############################################################

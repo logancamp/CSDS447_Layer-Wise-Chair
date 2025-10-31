@@ -74,11 +74,11 @@ make setup
 
 ## 2) Data Accumulation
 make collect_data
+<br><br>
 
 # Running Full Logarithmic Regression (BASH):
 ## 0) Run the full data collection + training + prediction:
 make full_run_lr
-<br><br>
 
 # Running Full Attention Neural Network (BASH):
 ## 0) Run the full data collection + training + prediction:

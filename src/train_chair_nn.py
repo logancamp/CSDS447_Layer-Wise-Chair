@@ -4,15 +4,13 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Subset
-from sklearn.model_selection import train_test_split
+import pandas as pd
+from torch.utils.data import TensorDataset
 from sklearn.metrics import roc_auc_score, average_precision_score, f1_score
 from tqdm import tqdm
 import numpy as np
 import sys
-# --- UPDATED IMPORT ---
-# We now import ChairDataset and collate_fn from chair_model.py
-from chair_model import CHAIRModel, ChairDataset, collate_fn 
-# ----------------------
+from chair_model import CHAIRModel
 
 """
 Trains the CHAIRModel neural network.
@@ -47,52 +45,47 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    # --- 1. Load Metadata ---
-    #TODO: Redo dataloading and split to be consistent with new data - mimic train_chair.py
-    meta_path = Path(args.features).with_suffix(".meta.json")
-    if not meta_path.exists():
-        print(f"Error: Could not find metadata file at {meta_path}")
-        print("Please ensure it exists (it should be created by featurize_nn.py)")
-        sys.exit(1)
-        
-    with open(meta_path, "r") as f:
-        meta = json.load(f)
-    
-    scalar_feature_names = meta["scalar_feature_names"]
-    K = meta["K"]
-    print(f"Loaded metadata. Num scalar features: {len(scalar_feature_names)}")
+    # --- 1. Load Metadata from CSV ---
+    cdf = pd.read_csv(args.features)
+    if not {"y", "split"}.issubset(cdf.columns):
+        raise SystemExit("CSV must contain columns: 'y' and 'split'.")
+    feature_cols = [c for c in cdf.columns if c not in ("qid", "split", "y")]
+    scalar_feature_names = feature_cols
+    K = 1  # use 1-step dummy sequences to satisfy the model's seq inputs
+    print(f"Loaded CSV. Scalar features: {len(scalar_feature_names)} | K={K}")
 
-    # --- 2. Load Data and Create Splits ---
+    # --- 2. Load Data and Create Splits (from CSV) ---
     print("Loading data...")
-    full_dataset = ChairDataset(
-        features_jsonl_path=args.features,
-        scalar_feature_names=scalar_feature_names
-    )
-    
-    # Create train/validation split (80/20)
-    indices = list(range(len(full_dataset)))
-    labels = [full_dataset[i][3].item() for i in indices] # Get labels for stratification
-    
-    train_indices, val_indices = train_test_split(
-        indices, test_size=0.2, random_state=42, stratify=labels
-    )
-    
+    X  = torch.tensor(cdf[scalar_feature_names].values, dtype=torch.float32)
+    y  = torch.tensor(cdf["y"].astype(int).values, dtype=torch.float32)
+    lp = torch.zeros((X.size(0), K), dtype=torch.float32)   # dummy logprob sequence
+    ent= torch.zeros((X.size(0), K), dtype=torch.float32)   # dummy entropy sequence
+    full_dataset = TensorDataset(X, lp, ent, y)
+
+    splits_by_idx = cdf["split"].astype(str).tolist()
+    labels_by_idx = cdf["y"].astype(int).tolist()
+
+    train_indices = [i for i, s in enumerate(splits_by_idx) if s == "train"]
+    val_indices   = [i for i, s in enumerate(splits_by_idx) if s == "val"]
+    test_indices  = [i for i, s in enumerate(splits_by_idx) if s == "test"]  # optional
+
+    if not train_indices or not val_indices:
+        raise SystemExit(f"Empty split(s): train={len(train_indices)} val={len(val_indices)} test={len(test_indices)}")
+
     train_dataset = Subset(full_dataset, train_indices)
-    val_dataset = Subset(full_dataset, val_indices)
-    
-    print(f"Data loaded: {len(train_dataset)} train, {len(val_dataset)} validation samples.")
+    val_dataset   = Subset(full_dataset, val_indices)
+
+    print(f"Data loaded: train={len(train_dataset)} | val={len(val_dataset)} | test={len(test_indices)}")
 
     train_loader = DataLoader(
         train_dataset, 
         batch_size=args.batch_size, 
-        shuffle=True, 
-        collate_fn=collate_fn
+        shuffle=True
     )
     val_loader = DataLoader(
         val_dataset, 
         batch_size=args.batch_size, 
-        shuffle=False, 
-        collate_fn=collate_fn
+        shuffle=False
     )
 
     # --- 3. Initialize Model and Optimizer ---
@@ -106,10 +99,14 @@ def main():
     
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     
-    # Calculate class weights for unbalanced data
-    # y=1 (hallucination) is the minority class
-    pos_weight = (len(labels) - sum(labels)) / sum(labels)
-    print(f"Using positive class weight: {pos_weight:.2f}")
+    # Class weights from TRAIN only
+    train_labels = [labels_by_idx[i] for i in train_indices]
+    pos = sum(train_labels)
+    neg = len(train_labels) - pos
+    if pos == 0:
+        raise SystemExit("No positive examples in train split; cannot compute pos_weight.")
+    pos_weight = neg / pos
+    print(f"Using positive class weight (train only): {pos_weight:.2f}")
     criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(pos_weight, device=device))
 
     # --- 4. Training Loop ---

@@ -3,21 +3,20 @@ from pathlib import Path
 import torch
 from torch.utils.data import DataLoader, SequentialSampler
 import numpy as np
-from chair_model import CHAIRModel, ChairDataset, collate_fn
 from tqdm import tqdm
 import sys
-# --- MISSING IMPORTS ADDED HERE ---
+from chair_model import CHAIRModel
+import pandas as pd
+from torch.utils.data import TensorDataset
 from sklearn.metrics import (
     roc_auc_score, average_precision_score, accuracy_score, f1_score
 )
-# ----------------------------------
-
 
 def fetch_args():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model_path", required=True, help="Path to trained chair_nn.pth model")
-    ap.add_argument("--preds_jsonl", required=True, help="Path to the raw eval_run.jsonl from eval_mc1")
-    ap.add_argument("--features_jsonl", required=True, help="Path to the featurize_nn.py output (eval_run.features.jsonl)")
+    ap.add_argument("--model_pth", required=True, help="Path to trained chair_nn.pth model")
+    ap.add_argument("--test_data", required=True, help="Path to the raw mc1_results.jsonl from eval_mc1")
+    ap.add_argument("--features", required=True, help="Path to features CSV (mc1_results.features.csv)")
     ap.add_argument("--batch_size", type=int, default=32)
     args = ap.parse_args()
     return args
@@ -28,18 +27,13 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    # --- Load Metadata ---
-    meta_path = Path(args.features_jsonl).with_suffix(".meta.json")
-    if not meta_path.exists():
-        print(f"Error: Could not find metadata file at {meta_path}")
-        print("Please ensure it exists (it should be created by featurize_nn.py)")
-        sys.exit(1)
-        
-    with open(meta_path, "r") as f:
-        meta = json.load(f)
-    
-    scalar_feature_names = meta["scalar_feature_names"]
-    K = meta["K"]
+    # --- Load metadata from CSV ---
+    cdf = pd.read_csv(args.features)
+    if not {"y", "split"}.issubset(cdf.columns):
+        raise SystemExit("CSV must contain columns: 'y' and 'split'.")
+    feature_cols = [c for c in cdf.columns if c not in ("qid","split","y")]
+    scalar_feature_names = feature_cols
+    K = 1 
     
     # --- Load Model ---
     try:
@@ -64,17 +58,17 @@ def main():
         print(f"Error loading model: {e}")
         sys.exit(1)
 
-    # --- Load Prediction Data ---
-    dataset = ChairDataset(
-        features_jsonl_path=args.features_jsonl,
-        scalar_feature_names=scalar_feature_names
-    )
-    
+    # --- Load Prediction Data from CSV ---
+    X   = torch.tensor(cdf[scalar_feature_names].values, dtype=torch.float32)
+    y   = torch.tensor(cdf["y"].astype(int).values, dtype=torch.float32)
+    lp  = torch.zeros((X.size(0), K), dtype=torch.float32)   # dummy logprob seq
+    ent = torch.zeros((X.size(0), K), dtype=torch.float32)   # dummy entropy seq
+    dataset = TensorDataset(X, lp, ent, y)
+
     pred_loader = DataLoader(
         dataset,
-        sampler=SequentialSampler(dataset), # Keep order for matching
-        batch_size=args.batch_size,
-        collate_fn=collate_fn
+        sampler=SequentialSampler(dataset),  # keep order to match preds_jsonl
+        batch_size=args.batch_size
     )
 
     # --- Run Predictions ---
@@ -105,7 +99,7 @@ def main():
         "f1": float(f1_score(y_true, y_pred)),
     }
     
-    metrics_path = Path(args.features_jsonl).with_suffix(".metrics.json")
+    metrics_path = Path(args.features).with_suffix(".metrics.json")
     with open(metrics_path, "w") as f:
         json.dump(metrics, f, indent=2)
     print(f"\nSaved evaluation metrics to: {metrics_path}")
@@ -116,7 +110,10 @@ def main():
     out = src.with_suffix(".chair_scored.jsonl")
     
     with open(src, "r", encoding="utf-8") as f_in, open(out, "w", encoding="utf-8") as f_out:
-        for p, line in zip(all_scores, f_in):
+        # keep lengths aligned in case of mismatch
+        lines = [ln for ln in f_in if ln.strip()]
+        n = min(len(lines), len(all_scores))
+        for p, line in zip(all_scores[:n], lines[:n]):
             if not line.strip():
                 continue
             r = json.loads(line)

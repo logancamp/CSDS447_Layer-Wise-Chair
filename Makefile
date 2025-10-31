@@ -10,7 +10,7 @@ collect_data:
 
 
 # --- V1: Logistic Regression Pipeline ---
-featurize_data_lr:
+featurize_data:
 	python src/featurize.py --tmodel lr --preds outputs/mc1_results.jsonl --K 18
 
 train_model_lr:
@@ -23,23 +23,20 @@ predict_lr:
 	  --test_data outputs/mc1_results.jsonl \
 	  --features outputs/mc1_results.features.csv
 
-full_run_lr: setup collect_data featurize_data_lr train_model_lr predict_lr
+full_run_lr: setup collect_data featurize_data train_model_lr predict_lr
 
 
 # --- V2: Neural Network (NN) Pipeline ---
-featurize_data_nn:
-	python src/featurize.py --tmodel nn --preds outputs/mc1_results.jsonl --K 32 \
-
 train_model_nn:
 	python src/train_chair_nn.py --features outputs/mc1_results.features.csv --epochs 10
 
 predict_nn:
 	python src/predict_chair_nn.py \
-	  --model_path outputs/chair_nn.pth \
-	  --preds_jsonl outputs/eval_run.jsonl \
-	  --features_jsonl outputs/eval_run.features.jsonl
+	  --model_pth outputs/chair_nn.pth \
+	  --test_data outputs/mc1_results.jsonl \
+	  --features outputs/mc1_results.features.csv
 
-full_run_nn: setup collect_data featurize_data_nn train_model_nn predict_nn
+full_run_nn: setup collect_data featurize_data train_model_nn predict_nn
 
 
 # --- Aliases ---

@@ -7,17 +7,19 @@ setup:
 # --- Data Collection (Shared) ---
 collect_data:
 	python src/eval_mc1.py --seed 42
+	
 
-
-# --- V1: Logistic Regression Pipeline ---
+# --- Featurization (Shared) ---
 featurize_data:
 	python src/featurize.py --tmodel lr --preds outputs/mc1_results.jsonl --K 18
 
+
+# --- V1: Logistic Regression Pipeline ---
 train_model_lr:
-	python src/train_chair.py --features outputs/mc1_results.features.csv
+	python src/train_chair_lr.py --features outputs/mc1_results.features.csv
 
 predict_lr:
-	python src/predict_chair.py \
+	python src/predict_chair_lr.py \
 	  --model_pkl outputs/chair_classifier_lr.pkl \
 	  --train_metrics outputs/chair_classifier_lr.train_metrics.json \
 	  --test_data outputs/mc1_results.jsonl \

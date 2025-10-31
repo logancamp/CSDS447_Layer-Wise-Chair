@@ -75,13 +75,15 @@ make setup
 ## 2) Data Accumulation
 make collect_data
 
-# Running Logarithmic Regression (BASH):
+# Running Full Logarithmic Regression (BASH):
 ## 0) Run the full data collection + training + prediction:
 make full_run_lr
+<br><br>
 
-# Running Attention Neural Network (BASH):
+# Running Full Attention Neural Network (BASH):
 ## 0) Run the full data collection + training + prediction:
 make full_run_nn
+<br><br>
 
 # Step-by-step Run LR/NN (BASH):
 ## 1) Featurize the train data - numeric:
@@ -95,7 +97,7 @@ make train_model_nn
 ## Run Prediction on a Model (Independent-Post Training):
 make predict_lr <br>
 make predict_nn
-<br><br>
+<br><br><br>
 
 # FILES:
 ## raw, human readile data: 

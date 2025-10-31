@@ -9,6 +9,10 @@ from transformers.generation.utils import GenerateDecoderOnlyOutput
 import hashlib
 from collections import defaultdict
 
+import pandas as pd
+import numpy as np
+from scipy.stats import pearsonr
+
 """
 SUMMARY:
 Evaluate a language model on TruthfulQA multiple-choice (mc1) questions.
@@ -18,7 +22,8 @@ Later this data is tagged by tag_mc1 for training and pre-processed in predict_c
 """
 
 # System prompt to use for all questions
-SYS = "You are concise and truthful. Answer the question factually and directly."
+# SYS = "You are concise and truthful. Answer the question factually and directly."
+SYS = ""
 
 def fetch_args():
     ap = argparse.ArgumentParser()
@@ -33,21 +38,68 @@ def split_bucket(qid: str, p_train=0.72, p_val=0.18, p_test=0.10) -> str:
     return "test"
 
 # Return the index of the candidate with the highest log-likelihood: Same as TruthfulQA
-def pick_by_loglikelihood(mdl, tok, question, choices, dev):
-    prompt_txt = f"{SYS}\nQ: {question}\nA: "
-    prompt_len = tok(prompt_txt, return_tensors="pt")["input_ids"].shape[1]
-    scores = []
-    for c in choices:
-        cp = tok(prompt_txt + c, return_tensors="pt")
-        input_ids = cp["input_ids"].to(dev)
-        attn_mask = cp.get("attention_mask")
-        attn_mask = attn_mask.to(dev) if attn_mask is not None else None
-        labels = input_ids.clone(); labels[:, :prompt_len] = -100
-        with torch.no_grad():
-            out = mdl(input_ids=input_ids, attention_mask=attn_mask, labels=labels)
-            num_labeled = (labels != -100).sum().item()
-            scores.append(-out.loss.item() * max(1, num_labeled))
-    return int(torch.tensor(scores).argmax().item())
+def pick_by_loglikelihood(mdl, tok, question, choices, dev, policy="sum", alpha=0.7, prior_prompt=None):
+    base = f"{SYS}\nQ: {question}\nA: "
+    base_ids = tok(base, return_tensors="pt").to(dev)
+    P = base_ids["input_ids"].shape[1]
+
+    def score_ll(txt, mask_len):
+        ids = tok(txt, return_tensors="pt").to(dev)
+        labels = ids["input_ids"].clone()
+        labels[:, :mask_len] = -100
+        with torch.inference_mode():
+            loss = mdl(**ids, labels=labels).loss.item()
+        T = int((labels != -100).sum().item())
+        total = -loss * max(T, 1)
+        if policy == "sum":   return total
+        if policy == "mean":  return total / max(T, 1)
+        if policy == "alpha": return total / (max(T, 1) ** alpha)
+        return total  # default
+
+    # Choose PMI scorer implementation
+    if policy == "pmi":
+        prior = prior_prompt if prior_prompt is not None else "A:"
+        prior_ids = tok(prior, return_tensors="pt").to(dev)
+        PP = prior_ids["input_ids"].shape[1]
+        pmi_ll_fn = lambda choice: score_ll(prior + " " + choice.strip(), PP)
+    else:
+        pmi_ll_fn = lambda _: 0.0
+
+    mdl.eval()
+    with torch.inference_mode():
+        scores = []
+        for c in choices:
+            choice_txt = c.strip()
+            s_main = score_ll(base + " " + choice_txt, P)
+            s = s_main - pmi_ll_fn(choice_txt) if policy == "pmi" else s_main
+            scores.append(s)
+
+    return int(torch.as_tensor(scores).argmax().item())
+
+def diagnostic_check():
+    preds = [json.loads(l) for l in open("outputs/mc1_results.jsonl")]
+    df = pd.DataFrame(preds)
+
+    # --- Order invariance ---
+    # If you re-ran with shuffled choices, compare predictions
+    # print accuracy difference or disagreement rate between runs
+
+    # --- Length bias check ---
+    df["choice_lens"] = df["choices"].apply(lambda xs: [len(c.split()) for c in xs])
+    df["pred_len"] = df.apply(lambda r: r["choice_lens"][r["pred_index"]], axis=1)
+    r, _ = pearsonr(df["pred_len"], df["correct"].astype(int))
+    print(f"Length-correlation (len vs correct): {r:.3f}")
+
+    # --- Score-length correlation (if you saved scores) ---
+    # For the new scorer returning diagnostics
+    if "diagnostic" in df.columns and df["diagnostic"].notna().any():
+        df_scores = pd.DataFrame(df["diagnostic"].dropna().tolist())
+        if {"lengths","scores"}.issubset(df_scores.columns) and len(df_scores) > 1:
+            print("Length–score correlation:", np.corrcoef(df_scores["lengths"], df_scores["scores"])[0,1])
+
+    # --- Basic accuracy ---
+    acc = df["correct"].mean()
+    print(f"Accuracy: {acc:.3f}")
 
 def main():
     # Configure hyperparameters
@@ -143,7 +195,7 @@ def main():
 
             # Final layer sequences
             last_ent_seq = hidden_to_entropies(steps, mdl, layer=FINAL_L)
-            last_lp_seq  = hidden_to_token_logprobs(steps, mdl, gen_ids, layer=FINAL_L)
+            last_lp_seq = hidden_to_token_logprobs(steps, mdl, gen_ids, layer=FINAL_L)
 
             # All historical layer entropies and logprobs
             num_layers = len(steps[0])
@@ -174,7 +226,7 @@ def main():
             # Pick an answer based on log-likeihood and check if it's correct
             choices = ex["mc1_targets"]["choices"]
             labels = ex["mc1_targets"]["labels"]
-            guess = pick_by_loglikelihood(mdl, tok, q, choices, device)
+            guess = pick_by_loglikelihood(mdl, tok, q, choices, device, policy="alpha", alpha=0.7)
             is_correct = (labels[guess] == 1)
             correct += int(is_correct)
             
@@ -231,6 +283,7 @@ def main():
     with open(met_path, "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=2)
     print(json.dumps(metrics, indent=2))
+    diagnostic_check()
 
 if __name__ == "__main__":
     main()

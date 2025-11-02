@@ -61,6 +61,7 @@ Are we able to detect these hallucinations earlier rather than only in the last 
   - Look for trends across depth
     - Do these effects get stronger or weaker as you go deeper into the network?
     - Spearman correlation (measure of how one thing changes with another, i.e. layer vs strength of pattern)
+<br><br>
 
 ## AI Use Disclosure:
 Generative Ai models (GPT-5) was used to help with debugging, and some code generation, primarily file writing tasks. It was also used to help with tuning and ideation for data pre-processing to improve outputs or to learn about library/model implimentation steps. Outputs were both cross checked with online forums like Stackoverflow or GeeksForGeeks and official documentations, as well as edited and cleaned/fixed from personal knowledge. AI tools like copilot were also used occasionally for debugging tasks within the codebase using VSCode's "fix" tool, also verified and fixed using personal knowledge.

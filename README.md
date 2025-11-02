@@ -34,7 +34,7 @@ Are we able to detect these hallucinations earlier rather than only in the last 
 - Highly skewed data for Llama models
 - Models consistently hallucinate, not enough correct data (20%)
 
-## Progress/Attempts for Limitation Fixes (attempts in LR model):
+### Progress/Attempts for Limitation Fixes (attempts in LR model):
 - Re-weighing minority features
 - Down-sampling majority samples
 - Use of a tree model over logarithmic regression

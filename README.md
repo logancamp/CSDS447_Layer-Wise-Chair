@@ -33,6 +33,10 @@ Are we able to detect these hallucinations earlier rather than only in the last 
 ## Limitations for Future Work:
 - Highly skewed data for Llama models
 - Models consistently hallucinate, not enough correct data (20%)
+<br>
+- In outputs, lr models are adjusted to prevent threshold tuning from learning to only predict YES to hallucination
+- In outputs, nn models still use threshold tuneing but appear to only predict YES to hallucinations
+- lr models predict similarly to nn when threshold tuning remains in place
 
 ### Progress/Attempts for Limitation Fixes (attempts in LR model):
 - Re-weighing minority features

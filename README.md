@@ -39,6 +39,16 @@ Are we able to detect these hallucinations earlier rather than only in the last 
 - Down-sampling majority samples
 - Use of a tree model over logarithmic regression
 - SMOTE for synthetic data
+### Last Resort, Potential Solution:
+- Statistical analysis on layer features rather than model prediction
+  - Mean difference per layer
+  - T-test to check if the difference is statistically significant or random
+  - Cohen’s d (how big is the effect?)
+  - AUROC (how well a feature could separate a hallucination vs correct response)
+  - Mutual information (how much knowing that number tells about correctness)
+  - Look for trends across depth
+    - Do these effects get stronger or weaker as you go deeper into the network?
+    - Spearman correlation (measure of how one thing changes with another, i.e. layer vs strength of pattern)
 <br><br>
 
 ## Goals and Next Steps:
@@ -49,18 +59,6 @@ Are we able to detect these hallucinations earlier rather than only in the last 
   - Create more data with appended re-questioning (may cause messy data)
 - After we will adjust our dataset to include partially completed layer data - or collect per layer data and train per layer to learn internal patterns. <br>
 - Lastly we will attempt classification at each layer to track hallucinations throughout the process of generation for better explainability for LLM hallucination early detection.
-<br><br>
-
-## Last Resort, Potential Solution:
-- Statistical analysis on layer features rather than model prediction
-  - Mean difference per layer
-  - T-test to check if the difference is statistically significant or random
-  - Cohen’s d (how big is the effect?)
-  - AUROC (how well a feature could separate a hallucination vs correct response)
-  - Mutual information (how much knowing that number tells about correctness)
-  - Look for trends across depth
-    - Do these effects get stronger or weaker as you go deeper into the network?
-    - Spearman correlation (measure of how one thing changes with another, i.e. layer vs strength of pattern)
 <br><br>
 
 ## AI Use Disclosure:

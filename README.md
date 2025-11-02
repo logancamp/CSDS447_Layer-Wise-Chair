@@ -65,51 +65,51 @@ Are we able to detect these hallucinations earlier rather than only in the last 
 Generative Ai models (GPT-5) was used to help with debugging, and some code generation, primarily file writing tasks. It was also used to help with tuning and ideation for data pre-processing to improve outputs or to learn about library/model implimentation steps. Outputs were both cross checked with online forums like Stackoverflow or GeeksForGeeks and official documentations, as well as edited and cleaned/fixed from personal knowledge. AI tools like copilot were also used occasionally for debugging tasks within the codebase using VSCode's "fix" tool, also verified and fixed using personal knowledge.
 
 ### General Prompt Formats:
-"{context like code snippets, occasionally used for specific tasks}<br>
-Tell me how to impliment a {model/outputting task} using {library like sklearn}"
+"*{context like code snippets, occasionally used for specific tasks}*<br>
+Tell me how to impliment a *{model/outputting task}* using *{library like sklearn}*"
 <br><br>
-"Explain how a general implimentation of {model} from sklearn would be coded. What packages are needed?"
+"Explain how a general implimentation of *{model}* from sklearn would be coded. What packages are needed?"
 <br><br>
-"{Error Context}<br>
+"*{Error Context}*<br>
 Where does this error occur in my implimentation? <br>
-{Code Snippet Context}"
+*{Code Snippet Context}*"
 <br><br>
-"Explain: {Context, typically statistics or coding errors}"
-<br><br>
+"Explain: *{Context, typically statistics or coding errors}*"
+<br><br><br>
 
 # Get Started (BASH):
 ## 0) Setup Dependencies
 sudo singularity build singularity.sif container.def
 
 ## 1) Activate + Setup Environment
-singularity shell --nv singularity.sif <br>
-make setup
+'singularity shell --nv singularity.sif' <br>
+'make setup'
 
 ## 2) Data Accumulation
-make collect_data
+'make collect_data'
 <br><br>
 
 # Running Full Logarithmic Regression (BASH):
 ## 0) Run the full data collection + training + prediction:
-make full_run_lr
+'make full_run_lr'
 
 # Running Full Attention Neural Network (BASH):
 ## 0) Run the full data collection + training + prediction:
-make full_run_nn
+'make full_run_nn'
 <br><br>
 
 # Step-by-step Run LR/NN (BASH):
 ## 1) Featurize the train data - numeric:
-make featurize_data_lr <br>
-make featurize_data_nn
+'make featurize_data_lr' <br>
+'make featurize_data_nn'
 
 ## 2) Trained Model + Val + Test:
-make train_model_lr <br>
-make train_model_nn
+'make train_model_lr' <br>
+'make train_model_nn'
 
 ## Run Prediction on a Model (Independent-Post Training):
-make predict_lr <br>
-make predict_nn
+'make predict_lr' <br>
+'make predict_nn'
 <br><br><br>
 
 # FILES:

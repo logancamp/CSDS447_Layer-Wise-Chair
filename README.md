@@ -62,6 +62,20 @@ Are we able to detect these hallucinations earlier rather than only in the last 
     - Do these effects get stronger or weaker as you go deeper into the network?
     - Spearman correlation (measure of how one thing changes with another, i.e. layer vs strength of pattern)
 
+## AI Use Disclosure:
+Generative Ai models (GPT-5) was used to help with debugging, and some code generation, primarily file writing tasks. It was also used to help with tuning and ideation for data pre-processing to improve outputs or to learn about library/model implimentation steps. Outputs were both cross checked with online forums like Stackoverflow or GeeksForGeeks and official documentations, as well as edited and cleaned/fixed from personal knowledge. AI tools like copilot were also used occasionally for debugging tasks within the codebase using VSCode's "fix" tool, also verified and fixed using personal knowledge.
+
+### General Prompt Formats:
+"{context like code snippets, occasionally used for specific tasks}<br>
+Tell me how to impliment a {model/outputting task} using {library like sklearn}"
+<br><br>
+"Explain how a general implimentation of {model} from sklearn would be coded. What packages are needed?"
+<br><br>
+"{Error Context}<br>
+Where does this error occur in my implimentation? <br>
+{Code Snippet Context}"
+<br><br>
+"Explain: {Context, typically statistics or coding errors}"
 <br><br>
 
 # Get Started (BASH):

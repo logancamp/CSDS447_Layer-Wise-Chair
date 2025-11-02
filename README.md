@@ -39,7 +39,7 @@ Are we able to detect these hallucinations earlier rather than only in the last 
 - Down-sampling majority samples
 - Use of a tree model over logarithmic regression
 - SMOTE for synthetic data
-### Last Resort, Potential Solution:
+### Last Resort Solution:
 - Statistical analysis on layer features rather than model prediction
   - Mean difference per layer
   - T-test to check if the difference is statistically significant or random

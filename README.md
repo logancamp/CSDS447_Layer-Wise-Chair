@@ -79,37 +79,37 @@ Where does this error occur in my implimentation? <br>
 
 # Get Started (BASH):
 ## 0) Setup Dependencies
-sudo singularity build singularity.sif container.def
+`sudo singularity build singularity.sif container.def`
 
 ## 1) Activate + Setup Environment
-'singularity shell --nv singularity.sif' <br>
-'make setup'
+`singularity shell --nv singularity.sif` <br>
+`make setup`
 
 ## 2) Data Accumulation
-'make collect_data'
+`make collect_data`
 <br><br>
 
 # Running Full Logarithmic Regression (BASH):
 ## 0) Run the full data collection + training + prediction:
-'make full_run_lr'
+`make full_run_lr`
 
 # Running Full Attention Neural Network (BASH):
 ## 0) Run the full data collection + training + prediction:
-'make full_run_nn'
+`make full_run_nn`
 <br><br>
 
 # Step-by-step Run LR/NN (BASH):
 ## 1) Featurize the train data - numeric:
-'make featurize_data_lr' <br>
-'make featurize_data_nn'
+`make featurize_data_lr` <br>
+`make featurize_data_nn`
 
 ## 2) Trained Model + Val + Test:
-'make train_model_lr' <br>
-'make train_model_nn'
+`make train_model_lr` <br>
+`make train_model_nn`
 
 ## Run Prediction on a Model (Independent-Post Training):
-'make predict_lr' <br>
-'make predict_nn'
+`make predict_lr` <br>
+`make predict_nn`
 <br><br><br>
 
 # FILES:

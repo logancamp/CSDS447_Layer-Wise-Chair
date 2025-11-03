@@ -10,7 +10,8 @@ if TYPE_CHECKING:
     # Use the new path for type checkers; ignored at runtime
     from transformers.generation.utils import GenerateDecoderOnlyOutput  # type: ignore
 else:
-    GenerateDecoderOnlyOutput = Any  # runtime fallback (no dependency)import hashlib
+    GenerateDecoderOnlyOutput = Any  # runtime fallback (no dependency)
+import hashlib
 from collections import defaultdict
 
 import pandas as pd

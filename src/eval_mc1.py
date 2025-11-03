@@ -5,8 +5,12 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 from logit_utils import summarize_logprobs, summarize_entropies, hidden_to_token_logprobs, hidden_to_entropies
 from typing import cast
-from transformers.generation.utils import GenerateDecoderOnlyOutput
-import hashlib
+from typing import TYPE_CHECKING, Any
+if TYPE_CHECKING:
+    # Use the new path for type checkers; ignored at runtime
+    from transformers.generation.utils import GenerateDecoderOnlyOutput  # type: ignore
+else:
+    GenerateDecoderOnlyOutput = Any  # runtime fallback (no dependency)import hashlib
 from collections import defaultdict
 
 import pandas as pd

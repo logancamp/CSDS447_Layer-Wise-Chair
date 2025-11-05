@@ -31,6 +31,12 @@ def main():
     ap.add_argument("--features", required=True) # CSV from featurize.py
     ap.add_argument("--out", default="outputs/chair_classifier_lr.pkl") # clf model output path
     args = ap.parse_args()
+    
+    # --- seeds ---
+    SPLIT_SEED = 23        # CV folds inside LogisticRegressionCV
+    MODEL_SEED = 999        # LR(SAGA) stochastic parts
+    SMOTE_BASE = 42        # only if you re-enable SMOTE section
+    DOWNSAMPLE_SEED = 0   # manual downsampling reproducibility
 
     # Load features
     df = pd.read_csv(args.features)
@@ -54,11 +60,11 @@ def main():
     #############################################################
     #############################################################
     # Define pipeline with SMOTE and logistic regression
-    """ pipe = Pipeline([
+    pipe = Pipeline([
         ("imputer", SimpleImputer(strategy="median")),
         ("vth", VarianceThreshold(threshold=1e-6)),
         ("scaler", StandardScaler(with_mean=True, with_std=True)),
-        ("smote", SMOTE(random_state=42)),
+        ("smote", SMOTE(random_state=SMOTE_BASE)),
         ("clf", LogisticRegression(
             penalty="elasticnet", 
             solver="saga", 
@@ -67,7 +73,7 @@ def main():
         )),
     ])
 
-    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=SPLIT_SEED)
     scoring = make_scorer(average_precision_score, response_method="predict_proba")
     param_grid = {
         "smote__sampling_strategy": [0.5, 0.7, 0.9, 1.0],
@@ -76,10 +82,10 @@ def main():
         "clf__l1_ratio": [0.5, 1.0],
         "clf__class_weight": [None, "balanced"],
     }
-    gs = GridSearchCV(pipe, param_grid, cv=cv, scoring=scoring, n_jobs=-1, refit=True) """
+    gs = GridSearchCV(pipe, param_grid, cv=cv, scoring=scoring, n_jobs=-1, refit=True)
     #############################################################
     # Train logistic regression with standard scaling
-    pipe = Pipeline([
+    """ pipe = Pipeline([
         ("imputer", SimpleImputer(strategy="median")),
         ("vth", VarianceThreshold(threshold=1e-6)),
         ("scaler", StandardScaler(with_mean=True, with_std=True)),
@@ -93,40 +99,41 @@ def main():
             class_weight=None,
             max_iter=20000,
             n_jobs=-1,
-            refit=True
+            refit=True,
+            random_state=MODEL_SEED
         ))
-    ])
+    ]) """
     #############################################################
     
     # Set class weights manually before
     # pipe.named_steps["clf"].class_weight = {0: len(ytr)/sum(np.array(ytr)==0), 1: len(ytr)/sum(np.array(ytr)==1)}  
     
     # Downsample majority class in TRAIN only
-    from sklearn.utils import resample
+    """ from sklearn.utils import resample
     print(f"Skew test: {train_df.y.value_counts()}")
     maj = train_df[train_df.y == 1]
     minr = train_df[train_df.y == 0]
 
     if len(maj) > len(minr):
-        maj_down = pd.DataFrame(resample(maj, replace=False, n_samples=len(minr), random_state=0))
+        maj_down = pd.DataFrame(resample(maj, replace=False, n_samples=len(minr), random_state=DOWNSAMPLE_SEED))
         train_df = pd.concat([maj_down, minr], ignore_index=True)
     else:
-        minr_down = pd.DataFrame(resample(minr, replace=False, n_samples=len(maj), random_state=0))
+        minr_down = pd.DataFrame(resample(minr, replace=False, n_samples=len(maj), random_state=DOWNSAMPLE_SEED))
         train_df = pd.concat([maj, minr_down], ignore_index=True)
         
     Xtr = train_df[feature_cols].values.tolist()
-    ytr = train_df["y"].astype(int).values.tolist()
+    ytr = train_df["y"].astype(int).values.tolist() """
     
     # Set class weights manually after
-    pipe.named_steps["clf"].class_weight = {0: len(ytr)/sum(np.array(ytr)==0), 1: len(ytr)/sum(np.array(ytr)==1)}  
+    # pipe.named_steps["clf"].class_weight = {0: len(ytr)/sum(np.array(ytr)==0), 1: len(ytr)/sum(np.array(ytr)==1)}  
     #############################################################
         
     # for simple pipeline
-    pipe.fit(Xtr, ytr)
+    # pipe.fit(Xtr, ytr)
     
     # for grid search pipeline with smote
-    # gs.fit(Xtr, ytr)
-    # pipe = gs.best_estimator_
+    gs.fit(Xtr, ytr)
+    pipe = gs.best_estimator_
     
     #############################################################
     #############################################################

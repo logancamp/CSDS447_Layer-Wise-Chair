@@ -103,8 +103,9 @@ def main():
     
     # Downsample majority class in TRAIN only
     from sklearn.utils import resample
-    maj = train_df[train_df.y == 0]
-    minr = train_df[train_df.y == 1]
+    print(f"Skew test: {train_df.y.value_counts()}")
+    maj = train_df[train_df.y == 1]
+    minr = train_df[train_df.y == 0]
 
     if len(maj) > len(minr):
         maj_down = pd.DataFrame(resample(maj, replace=False, n_samples=len(minr), random_state=0))
@@ -144,7 +145,7 @@ def main():
 
     # Apply same threshold to VAL and TEST
     yhat_val = (proba_val >= best_thr).astype(int)
-    yhat_te = (proba_te  >= best_thr).astype(int)
+    yhat_te = (proba_te >= best_thr).astype(int)
 
     # Metrics (VAL and TEST)
     val_auc = roc_auc_score(yva, proba_val); val_ap = average_precision_score(yva, proba_val)

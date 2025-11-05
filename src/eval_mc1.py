@@ -13,6 +13,15 @@ import pandas as pd
 import numpy as np
 from scipy.stats import pearsonr
 
+# --- speed knobs ---
+import os
+os.environ["TRANSFORMERS_CACHE"] = "/home/logancamp/.cache/huggingface"
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.set_float32_matmul_precision("high")
+torch.backends.cudnn.benchmark = True
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
+
+
 """
 SUMMARY:
 Evaluate a language model on TruthfulQA multiple-choice (mc1) questions.
@@ -104,9 +113,9 @@ def diagnostic_check():
 def main():
     # Configure hyperparameters
     args = fetch_args()
-    # model = "meta-llama/Meta-Llama-3-8B-Instruct"
-    model = "meta-llama/Llama-3.2-1B-Instruct"  # smaller for testing
-    max_new_tokens = 64
+    model = "meta-llama/Meta-Llama-3-8B-Instruct"
+    # model = "meta-llama/Llama-3.2-1B-Instruct"  # smaller for testing
+    max_new_tokens = 32
 
     # Set up output paths
     outdir = Path("outputs")
@@ -126,18 +135,31 @@ def main():
     device = torch.device("cuda:0" if use_cuda else "cpu")
 
     # Load model and tokenizer
-    tok = AutoTokenizer.from_pretrained(model)
+    tok = AutoTokenizer.from_pretrained(model, use_fast=True)
     tok.pad_token = tok.pad_token or tok.eos_token
     tok.padding_side = "left"
-    
-    # Load the LLM model
+
+    # Load the LLM model (8B on RTX 3070 via 4-bit + auto offload)
     mdl = AutoModelForCausalLM.from_pretrained(
         model,
-        device_map = "auto" if use_cuda else None,
-        dtype = torch.float16 if use_cuda else None,
+        load_in_4bit=True,                               # quantize to 4-bit
+        bnb_4bit_compute_dtype=torch.float16,            # fp16 compute
+        device_map="auto",                               # GPU + CPU mapping
+        offload_folder="/home/logancamp/offload",        # SSD folder in WSL
+        low_cpu_mem_usage=True,
     )
     mdl.config.pad_token_id = tok.pad_token_id
-    mdl.eval()    
+    mdl.config.use_cache = True
+    mdl.eval()
+
+    # Optional: print placement to verify
+    print("CUDA available:", torch.cuda.is_available())
+    print("GPU:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU")
+    try:
+        print("Device map:", mdl.hf_device_map)
+    except Exception:
+        pass
+
 
     # Load full split once
     ds = load_dataset("truthful_qa", "multiple_choice")["validation"]

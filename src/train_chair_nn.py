@@ -70,13 +70,16 @@ def main():
         .fillna(0.0)
         .to_numpy(dtype=np.float32, copy=False)
     )
-    y = torch.tensor(cdf["y"].astype(int).values, dtype=torch.float32)
+    # Train on hallucination: 1 = hallucination, 0 = correct
+    y_np = cdf["y"].astype("int64").to_numpy()
+    y = torch.tensor(y_np, dtype=torch.float32)
+    
     lp = torch.zeros((X.size(0), K), dtype=torch.float32)   # dummy logprob sequence
     ent = torch.zeros((X.size(0), K), dtype=torch.float32)   # dummy entropy sequence
     full_dataset = TensorDataset(X, lp, ent, y)
 
     splits_by_idx = cdf["split"].astype(str).tolist()
-    labels_by_idx = cdf["y"].astype(int).tolist()
+    labels_by_idx = y_np.tolist()
 
     train_indices = [i for i, s in enumerate(splits_by_idx) if s == "train"]
     val_indices = [i for i, s in enumerate(splits_by_idx) if s == "val"]
@@ -110,14 +113,14 @@ def main():
     
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     
-    # Class weights from TRAIN only
+    # Class weights from TRAIN only (positives = hallucinations)
     train_labels = [labels_by_idx[i] for i in train_indices]
-    pos = sum(train_labels)
+    pos = sum(train_labels)                 # count hallucinations (1s)
     neg = len(train_labels) - pos
     if pos == 0:
-        raise SystemExit("No positive examples in train split; cannot compute pos_weight.")
+        raise SystemExit("No positive examples (hallucinations) in train split; cannot compute pos_weight.")
     pos_weight = neg / pos
-    print(f"Using positive class weight (train only): {pos_weight:.2f}")
+    print(f"Using positive-class (hallucination) weight: {pos_weight:.2f}")
     criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(pos_weight, device=device))
 
     # --- 4. Training Loop ---
@@ -154,9 +157,9 @@ def main():
                 loss = criterion(logits, labels)
                 total_val_loss += loss.item()
                 
-                probs = torch.sigmoid(logits)
-                all_labels.extend(labels.cpu().numpy())
-                all_probs.extend(probs.cpu().numpy())
+                p_hall = torch.sigmoid(logits)  # P(hallucination)
+                all_labels.extend(labels.cpu().numpy().astype(int))  # labels already 1=hallucination
+                all_probs.extend(p_hall.cpu().numpy())
 
         avg_val_loss = total_val_loss / len(val_loader)
         
@@ -196,23 +199,43 @@ def main():
         for batch in val_loader:
             scalar_feats, lp_seqs, ent_seqs, labels = [b.to(device) for b in batch]
             logits = model(scalar_feats, lp_seqs, ent_seqs).squeeze(-1)
-            probs  = torch.sigmoid(logits)
+            
+            p_hall = torch.sigmoid(logits)  # P(hallucination)
             yva_list.extend(labels.cpu().numpy().astype(int))
-            pva_list.extend(probs.cpu().numpy())
+            pva_list.extend(p_hall.cpu().numpy())
+
     yva_arr = np.asarray(yva_list, dtype=int)
     pva_arr = np.asarray(pva_list, dtype=float)
 
     # Choose threshold by max-F1 on validation
-    cand_thrs = np.linspace(0.0, 1.0, 101)
-    f1s = []
-    for thr in cand_thrs:
-        yhat = (pva_arr >= thr).astype(int)
-        try:
-            f1s.append(f1_score(yva_arr, yhat))
-        except ValueError:
-            f1s.append(-1.0)
-    best_idx = int(np.argmax(f1s))
-    best_thr = float(cand_thrs[best_idx]) if np.max(f1s) >= 0.0 else 0.5
+    from sklearn.metrics import roc_curve, precision_recall_curve
+
+    # diagnostics
+    print(f"[Diag] val hallucination_rate={yva_arr.mean():.3f}, "
+        f"p(min/q1/med/q3/max)={np.min(pva_arr):.3f}/"
+        f"{np.percentile(pva_arr,25):.3f}/{np.median(pva_arr):.3f}/"
+        f"{np.percentile(pva_arr,75):.3f}/{np.max(pva_arr):.3f}")
+
+    # 1) Youden's J
+    fpr, tpr, thr = roc_curve(yva_arr, pva_arr)
+    j = tpr - fpr
+    best_thr = float(thr[int(np.argmax(j))])
+
+    def one_class(thr, scores):
+        yhat = (scores >= thr).astype(int)
+        return (yhat.min() == yhat.max())
+
+    # 2) Guard against one-class thresholds
+    if one_class(best_thr, pva_arr):
+        prec, rec, thr_pr = precision_recall_curve(yva_arr, pva_arr)
+        dif = np.abs(prec - rec[:-1])
+        best_thr = float(thr_pr[int(np.argmin(dif))])
+        if one_class(best_thr, pva_arr):
+            q = 1.0 - float(yva_arr.mean())  # prevalence-matching
+            best_thr = float(np.quantile(pva_arr, q))
+
+    print(f"[Thr] chosen={best_thr:.4f}")
+
 
     # Validation metrics at best_thr
     yhat_va = (pva_arr >= best_thr).astype(int)
@@ -238,9 +261,11 @@ def main():
             for batch in test_loader:
                 scalar_feats, lp_seqs, ent_seqs, labels = [b.to(device) for b in batch]
                 logits = model(scalar_feats, lp_seqs, ent_seqs).squeeze(-1)
-                probs = torch.sigmoid(logits)
+                
+                p_hall = torch.sigmoid(logits)
                 yte_list.extend(labels.cpu().numpy().astype(int))
-                pte_list.extend(probs.cpu().numpy())
+                pte_list.extend(p_hall.cpu().numpy())
+                
         yte_arr = np.asarray(yte_list, dtype=int)
         pte_arr = np.asarray(pte_list, dtype=float)
         yhat_te = (pte_arr >= best_thr).astype(int)

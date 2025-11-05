@@ -9,10 +9,12 @@ collect_data:
 	python src/eval_mc1.py --seed 42
 
 
-# --- V1: Logistic Regression Pipeline ---
-featurize_data_lr:
-	python src/featurize.py --tmodel lr --preds outputs/mc1_results.jsonl --K 18
+# --- Feature Extraction (Shared) ---
+featurize_data:
+	python src/featurize.py --preds outputs/mc1_results.jsonl --K 18
 
+
+# --- V1: Logistic Regression Pipeline ---
 train_model_lr:
 	python src/train_chair_lr.py --features outputs/mc1_results.features.csv
 
@@ -23,14 +25,11 @@ predict_lr:
 	  --test_data outputs/mc1_results.jsonl \
 	  --features outputs/mc1_results.features.csv
 
-output_run_lr: featurize_data_lr train_model_lr
-full_run_lr: setup collect_data featurize_data_lr train_model_lr predict_lr
+output_run_lr: featurize_data train_model_lr
+full_run_lr: setup collect_data featurize_data train_model_lr predict_lr
 
 
 # --- V2: Neural Network (NN) Pipeline ---
-featurize_data_nn:
-	python src/featurize.py --tmodel nn --preds outputs/mc1_results.jsonl --K 32
-
 train_model_nn:
 	python src/train_chair_nn.py --features outputs/mc1_results.features.csv --epochs 10
 
@@ -40,8 +39,8 @@ predict_nn:
 	  --test_data outputs/mc1_results.jsonl \
 	  --features outputs/mc1_results.features.csv
 
-output_run_nn: featurize_data_nn train_model_nn
-full_run_nn: setup collect_data featurize_data_nn train_model_nn predict_nn
+output_run_nn: featurize_data train_model_nn
+full_run_nn: setup collect_data featurize_data train_model_nn predict_nn
 
 
 # --- Aliases ---

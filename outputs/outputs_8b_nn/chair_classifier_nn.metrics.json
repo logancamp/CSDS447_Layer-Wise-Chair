@@ -1,0 +1,37 @@
+{
+  "timestamp": "2025-11-05 06:51:42",
+  "splits": {
+    "train_n": 593,
+    "val_n": 151,
+    "test_n": 73
+  },
+  "val": {
+    "auc_roc": 0.5,
+    "avg_precision": 0.7218543046357616,
+    "accuracy": 0.7218543046357616,
+    "precision": 0.7218543046357616,
+    "recall": 1.0,
+    "f1": 0.8384615384615385
+  },
+  "test": {
+    "auc_roc": 0.5,
+    "avg_precision": 0.6301369863013698,
+    "accuracy": 0.6301369863013698,
+    "precision": 0.6301369863013698,
+    "recall": 1.0,
+    "f1": 0.773109243697479
+  },
+  "feature_count": 2,
+  "feature_names": [
+    "last_ent_tail_vec",
+    "last_lp_tail_vec"
+  ],
+  "threshold": 0.0,
+  "model_params": {
+    "n_scalar_features": 2,
+    "k_seq_len": 1,
+    "d_model": 128,
+    "nhead": 4,
+    "num_layers": 2
+  }
+}

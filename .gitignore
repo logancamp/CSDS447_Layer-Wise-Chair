@@ -6,3 +6,6 @@ __pycache__/
 *.sif
 *.venv
 outputs/
+*.json
+*.jsonl
+*.csv

@@ -184,7 +184,7 @@ def main():
 
     print(f"\nTraining finished in {time.time() - start_time:.2f} seconds.")
 
-        # --- 5. Final Evaluation on Validation (and Test) ---
+    # --- 5. Final Evaluation on Validation (and Test) ---
     print("Evaluating best model on validation (and test if present)...")
     best_model_state = torch.load(args.out, map_location=device)
     model.load_state_dict(best_model_state['state_dict'])
@@ -221,14 +221,14 @@ def main():
     except ValueError:
         val_auc = float("nan")
     try:
-        val_ap  = float(average_precision_score(yva_arr, pva_arr))
+        val_ap = float(average_precision_score(yva_arr, pva_arr))
     except ValueError:
-        val_ap  = float("nan")
+        val_ap = float("nan")
         
-    val_acc  = float(accuracy_score(yva_arr, yhat_va))
+    val_acc = float(accuracy_score(yva_arr, yhat_va))
     val_prec = float(precision_score(yva_arr, yhat_va, zero_division=0))
-    val_rec  = float(recall_score(yva_arr, yhat_va, zero_division=0))
-    val_f1   = float(f1_score(yva_arr, yhat_va, zero_division=0))
+    val_rec = float(recall_score(yva_arr, yhat_va, zero_division=0))
+    val_f1 = float(f1_score(yva_arr, yhat_va, zero_division=0))
 
     # Test metrics (if present) using SAME threshold
     te_auc = te_ap = te_acc = te_prec = te_rec = te_f1 = float("nan")
@@ -238,7 +238,7 @@ def main():
             for batch in test_loader:
                 scalar_feats, lp_seqs, ent_seqs, labels = [b.to(device) for b in batch]
                 logits = model(scalar_feats, lp_seqs, ent_seqs).squeeze(-1)
-                probs  = torch.sigmoid(logits)
+                probs = torch.sigmoid(logits)
                 yte_list.extend(labels.cpu().numpy().astype(int))
                 pte_list.extend(probs.cpu().numpy())
         yte_arr = np.asarray(yte_list, dtype=int)
@@ -249,13 +249,13 @@ def main():
         except ValueError:
             te_auc = float("nan")
         try:
-            te_ap  = float(average_precision_score(yte_arr, pte_arr))
+            te_ap = float(average_precision_score(yte_arr, pte_arr))
         except ValueError:
-            te_ap  = float("nan")
-        te_acc  = float(accuracy_score(yte_arr, yhat_te))
+            te_ap = float("nan")
+        te_acc = float(accuracy_score(yte_arr, yhat_te))
         te_prec = float(precision_score(yte_arr, yhat_te, zero_division=0))
-        te_rec  = float(recall_score(yte_arr, yhat_te, zero_division=0))
-        te_f1   = float(f1_score(yte_arr, yhat_te, zero_division=0))
+        te_rec = float(recall_score(yte_arr, yhat_te, zero_division=0))
+        te_f1 = float(f1_score(yte_arr, yhat_te, zero_division=0))
 
     # Persist metrics in requested schema
     metrics = { 
@@ -266,14 +266,20 @@ def main():
             "test_n": int(len(test_indices))
         },
         "val":  {
-            "auc_roc": val_auc, "avg_precision": val_ap,
-            "accuracy": val_acc, "precision": val_prec,
-            "recall": val_rec, "f1": val_f1
+            "auc_roc": val_auc, 
+            "avg_precision": val_ap,
+            "accuracy": val_acc, 
+            "precision": val_prec,
+            "recall": val_rec, 
+            "f1": val_f1
         },
         "test": {
-            "auc_roc": te_auc, "avg_precision": te_ap,
-            "accuracy": te_acc, "precision": te_prec,
-            "recall": te_rec, "f1": te_f1
+            "auc_roc": te_auc, 
+            "avg_precision": te_ap,
+            "accuracy": te_acc, 
+            "precision": te_prec,
+            "recall": te_rec, 
+            "f1": te_f1
         },
         "feature_count": int(len(scalar_feature_names)),
         "feature_names": list(map(str, scalar_feature_names)),

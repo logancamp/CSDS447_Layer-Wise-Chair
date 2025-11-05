@@ -23,7 +23,8 @@ predict_lr:
 	  --test_data outputs/mc1_results.jsonl \
 	  --features outputs/mc1_results.features.csv
 
-full_run_lr: setup collect_data featurize_data train_model_lr predict_lr
+output_run_lr: featurize_data_lr train_model_lr
+full_run_lr: setup collect_data featurize_data_lr train_model_lr predict_lr
 
 
 # --- V2: Neural Network (NN) Pipeline ---
@@ -39,7 +40,8 @@ predict_nn:
 	  --test_data outputs/mc1_results.jsonl \
 	  --features outputs/mc1_results.features.csv
 
-full_run_nn: setup collect_data featurize_data train_model_nn predict_nn
+output_run_nn: featurize_data_nn train_model_nn
+full_run_nn: setup collect_data featurize_data_nn train_model_nn predict_nn
 
 
 # --- Aliases ---

@@ -46,11 +46,12 @@ Are we able to detect these hallucinations earlier rather than only in the last 
 ## Goals and Next Steps:
 - Next we hope to find, or generate more robust datasets:
   - Find available data from numerous other sources if they exist (Potenitally non-truthfulQA data)
-  - Try merging multiple TQA styled baselines (more correct responses not garenteed)
-  - Try to generate with larger model (not garenteed)
-  - Create more data with appended re-questioning (may cause messy data)
-- After we will adjust our dataset to include partially completed layer data - or collect per layer data and train per layer to learn internal patterns. <br>
-- Lastly we will attempt classification at each layer to track hallucinations throughout the process of generation for better explainability for LLM hallucination early detection.
+  - Try merging multiple TQA styled baselines (more correct responses, not garenteed)
+  - Try to generate with different models (not garenteed)
+- After,
+  - We will adjust our dataset to include partially completed layer data
+  - Or collect per layer data and train per layer to learn internal patterns. (most likely this one due to limited data availability) <br>
+- Lastly, we will run classification at each layer to track hallucinations throughout the process of generation for better explainability for LLM hallucination early detection. We hope to see significant changes in accuracy metrics to pinpoint which layers are the most important attributes for hallucination results. (do the last four layers, if omited, make a difference in hallucinated outputs? for example)
 <br><br>
 
 ## AI Use Disclosure:

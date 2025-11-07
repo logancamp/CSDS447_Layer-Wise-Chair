@@ -85,13 +85,22 @@ def main():
 
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=SPLIT_SEED)
     scoring = make_scorer(average_precision_score, response_method="predict_proba")
-    param_grid = {
-        "smote__sampling_strategy": [0.5, 0.7, 0.9, 1.0],
-        "smote__k_neighbors": [1, 3],
-        "clf__C": np.logspace(-4, 0, 6).tolist(),
-        "clf__l1_ratio": [0.5, 1.0],
-        "clf__class_weight": [None, "balanced"],
-    }
+    param_grid = [ #choose the better of smote of no smote
+        {
+            "smote": [SMOTE(random_state=SMOTE_BASE)],
+            "smote__sampling_strategy": [0.5, 0.7, 0.9, 1.0],
+            "smote__k_neighbors": [3, 5],
+            "clf__C": np.logspace(-4, -1, 5).tolist(),
+            "clf__l1_ratio": [0.5, 1.0],
+            "clf__class_weight": [None, "balanced"],
+        },
+        {
+            "smote": ["passthrough"],
+            "clf__C": np.logspace(-4, -1, 5).tolist(),
+            "clf__l1_ratio": [0.5, 1.0],
+            "clf__class_weight": [None, "balanced"],
+        },
+    ]
     gs = GridSearchCV(pipe, param_grid, cv=cv, scoring=scoring, n_jobs=-1, refit=True)
     #############################################################
     # Train logistic regression with standard scaling
@@ -100,7 +109,7 @@ def main():
         ("vth", VarianceThreshold(threshold=1e-6)),
         ("scaler", StandardScaler(with_mean=True, with_std=True)),
         ("clf", LogisticRegressionCV(
-            Cs=np.logspace(-4, 0, 6).tolist(),
+            Cs=np.logspace(-4, -1, 5).tolist(),
             cv=5,
             scoring="average_precision",
             penalty="elasticnet",

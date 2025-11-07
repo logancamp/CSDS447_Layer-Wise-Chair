@@ -117,9 +117,9 @@ def main():
     # model = "meta-llama/Meta-Llama-3-8B-Instruct"
     # model = "meta-llama/Llama-3.2-1B-Instruct"
     
-    model = "Qwen/Qwen3-4B-Instruct-2507"
+    # model = "Qwen/Qwen3-4B-Instruct-2507"
     # model = "Qwen/Qwen3-4B-Thinking-2507"
-    # model = "Qwen/Qwen3-235B-A22B-Instruct-2507"
+    model = "Qwen/Qwen3-8B"
     
     max_new_tokens = 32
 

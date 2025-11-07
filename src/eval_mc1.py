@@ -113,8 +113,14 @@ def diagnostic_check():
 def main():
     # Configure hyperparameters
     args = fetch_args()
-    model = "meta-llama/Meta-Llama-3-8B-Instruct"
-    # model = "meta-llama/Llama-3.2-1B-Instruct"  # smaller for testing
+    
+    # model = "meta-llama/Meta-Llama-3-8B-Instruct"
+    # model = "meta-llama/Llama-3.2-1B-Instruct"
+    
+    model = "Qwen/Qwen3-4B-Instruct-2507"
+    # model = "Qwen/Qwen3-4B-Thinking-2507"
+    # model = "Qwen/Qwen3-235B-A22B-Instruct-2507"
+    
     max_new_tokens = 32
 
     # Set up output paths
@@ -260,6 +266,13 @@ def main():
             split = split_bucket(str(qid))
             by_split[split]["n"] += 1
             by_split[split]["correct"] += int(is_correct)
+            
+            # Save full per-layer sequences (historical layers only, excluding final layer)
+            historical_layers = {
+                "layer_indices_in_range": list(range(hist_start, hist_end)),
+                "logprobs_seq_by_layer": lp_layers,
+                "entropies_seq_by_layer": ent_layers
+            }
 
             # Store the results for jsonl
             rec = {
@@ -277,6 +290,7 @@ def main():
                 "num_layers_total": num_layers,
                 "historical_layer_range": [hist_start, hist_end],
                 "chair_token_traces": chair_token_traces,
+                "historical_layers": historical_layers,
                 "last_layer": {
                     "logprobs_seq": last_lp_seq,
                     "entropies_seq": last_ent_seq,

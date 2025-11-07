@@ -39,6 +39,16 @@ def main():
     DOWNSAMPLE_SEED = 0   # manual downsampling reproducibility
 
     # Load features
+    """
+    TODO: 
+        abstract this reading step to a common util function and include the path to the layer data and the final layer cap, 
+        in this function if final layer == "all" format the same, just import features like this, 
+        otherwise cut off features at the cap layer and adjust the final layer logprobs and entropies from the 
+        featurize_hist output. 
+        Note: format the hist final layer the same as featurize.py file does for last layer
+              Look at features for formatting, and featurize_hist for full layer hist formats:
+                last_lp_tail_{i} and last_ent_tail_{i} per token
+    """ 
     df = pd.read_csv(args.features)
     df = df.replace([np.inf, -np.inf], np.nan)
 

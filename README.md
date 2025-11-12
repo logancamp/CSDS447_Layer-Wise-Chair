@@ -4,7 +4,8 @@ Lower Chair Score = Higher Predicted Chance of Hallucination
 <br><br>
 
 ## Models and Datasets:
-CHAIR: https://github.com/eggachecat/CHAIR 
+CHAIR: https://github.com/eggachecat/CHAIR <br>
+* Note: Due to bad documentation, seemingly broken code, and hardware limitations early on, we opted to train our own Logarithmic Regression model. We planned to update this to a similar attention model for Demo 2 but the model create performed very poorly, we hope to improve this model as well as the Logarithmic Regression to get better detection results and use the best model and LLM for our final layerwise analysis. Potentially transition to a different model and LLM if needed (see bellow for plans going forward). *
 <br><br>
 
 LLAMA 8B: https://huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct <br>
@@ -44,14 +45,15 @@ Are we able to detect these hallucinations earlier rather than only in the last 
 - SMOTE for synthetic data
 
 ## Goals and Next Steps:
-- Next we hope to find, or generate more robust datasets:
+- Next we hope to find, or generate more robust datasets or a better model:
   - Find available data from numerous other sources if they exist (Potenitally non-truthfulQA data)
   - Try merging multiple TQA styled baselines (more correct responses, not garenteed)
-  - Try to generate with different models (not garenteed)
+  - Try to generate with different LLM models (not garenteed)
+  - Potentially find alternative prediction model approaches like SelfCheck grey box methods, or other models similar to Chair for classification if model outputs are unuseable but we hope to improve the current models first to prevent large scale refactors
 - After,
-  - We will adjust our dataset to include partially completed layer data
+  - We will adjust our dataset to include subsets for partially completed layer data (i.e. data up through k layers instead of the full layer data)
   - Or collect per layer data and train per layer to learn internal patterns. (most likely this one due to limited data availability) <br>
-- Lastly, we will run classification at each layer to track hallucinations throughout the process of generation for better explainability for LLM hallucination early detection. We hope to see significant changes in accuracy metrics to pinpoint which layers are the most important attributes for hallucination results. (do the last four layers, if omited, make a difference in hallucinated outputs? for example)
+- Lastly, we will run classification at each layer to track hallucinations throughout the process of generation for better explainability for LLM hallucination early detection. We hope to see significant changes in accuracy metrics to pinpoint which layers are the most important attributes for hallucination results. (Foe example: Do the last four layers, if omited, make a difference in prediction outputs?)
 <br><br>
 
 ## AI Use Disclosure:

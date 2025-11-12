@@ -119,7 +119,8 @@ def main():
     
     # model = "Qwen/Qwen3-4B-Instruct-2507"
     # model = "Qwen/Qwen3-4B-Thinking-2507"
-    model = "Qwen/Qwen3-8B"
+    # model = "Qwen/Qwen3-8B"
+    model = "mistralai/Ministral-8B-Instruct-2410"
     
     max_new_tokens = 32
 

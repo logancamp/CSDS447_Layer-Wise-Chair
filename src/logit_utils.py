@@ -16,7 +16,7 @@ def hidden_to_token_logprobs(steps, mdl, gen_ids, layer=-1):
     logps = []
     for t, step in enumerate(steps):
         y_t = gen_ids[:, t]
-        h_last = step[layer][:, -1, :]                       # [1, D], same dtype as model
+        h_last = step[layer][:, -1, :] # [1, D], same dtype as model
         logits = _logits_from_hidden_lastpos(h_last, mdl)[0] # [V], dtype matches lm_head
         lp = torch.log_softmax(logits.to(torch.float32), dim=-1)[y_t.item()].item()
         logps.append(lp)

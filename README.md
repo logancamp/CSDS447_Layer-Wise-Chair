@@ -78,6 +78,9 @@ Where does this error occur in my implimentation? <br>
 
 ## 1) Activate + Setup Environment
 `singularity shell --nv singularity.sif` <br>
+
+singularity shell --nv --bind $PWD:/workspace --pwd /workspace new_singularity.sif
+
 `make setup`
 
 ## 2) Data Accumulation

@@ -61,7 +61,6 @@ def main():
 
     print(f"Loaded CSV. Scalar features: {len(scalar_feature_names)} | K={K}")
 
-    # --- 2. Load Data and Create Splits (from CSV) ---
     print("Loading data...")
     X = torch.tensor(
         cdf[scalar_feature_names]

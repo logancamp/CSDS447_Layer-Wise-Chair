@@ -12,7 +12,7 @@ collect_data:
 # --- Feature Extraction (Shared) ---
 featurize_data:
 	python src/featurize.py --preds outputs/mc1_results.jsonl --K 18
-	python src/featurize_hist.py --preds outputs/mc1_results.jsonl --K 18
+# 	python src/featurize_hist.py --preds outputs/mc1_results.jsonl --K 18
 
 
 # --- V1: Logistic Regression Pipeline ---

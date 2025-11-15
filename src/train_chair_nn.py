@@ -13,6 +13,7 @@ from sklearn.metrics import (
 from tqdm import tqdm
 import numpy as np
 from chair_model import CHAIRModel
+import random
 
 """
 Trains the CHAIRModel neural network.
@@ -44,10 +45,21 @@ def fetch_args():
 def main():
     args = fetch_args()
     
+    # --- seeds ---
+    MODEL_SEED = 49            # NN        : 49 1b, 376 8b, 284 q4bi, 437 4bt, 413 q8bi, 111 m8b
+    DOWNSAMPLE_SEED = 404      # NN | model: 404 1b, 253 8b, 67 q4bi, 100 4bt, 170 q8bi, 76 m8b
+    
+    # set global seeds for reproducibility
+    torch.manual_seed(MODEL_SEED)
+    np.random.seed(MODEL_SEED)
+    random.seed(MODEL_SEED)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(MODEL_SEED)
+    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    # --- 1. Load Metadata from CSV ---
+    # --- Load Metadata from CSV ---
     cdf = pd.read_csv(args.features)
     if not {"y", "split"}.issubset(cdf.columns):
         raise SystemExit("CSV must contain columns: 'y' and 'split'.")
@@ -60,7 +72,6 @@ def main():
     assert not leaky, f"Leaky target columns in features: {leaky}"
 
     print(f"Loaded CSV. Scalar features: {len(scalar_feature_names)} | K={K}")
-
     print("Loading data...")
     X = torch.tensor(
         cdf[scalar_feature_names]
@@ -83,6 +94,36 @@ def main():
     train_indices = [i for i, s in enumerate(splits_by_idx) if s == "train"]
     val_indices = [i for i, s in enumerate(splits_by_idx) if s == "val"]
     test_indices = [i for i, s in enumerate(splits_by_idx) if s == "test"]  # optional
+    
+    #############################################################
+    #############################################################
+    # --- Downsample majority class in TRAIN only (by indices) ---
+    """ train_pos = [i for i in train_indices if labels_by_idx[i] == 1]  # hallucinations
+    train_neg = [i for i in train_indices if labels_by_idx[i] == 0]  # correct
+    print(f"Skew (train) BEFORE downsample: pos={len(train_pos)} neg={len(train_neg)}")
+
+    if train_pos and train_neg:
+        # majority / minority
+        if len(train_pos) > len(train_neg):
+            maj, minr = train_pos, train_neg
+        else:
+            maj, minr = train_neg, train_pos
+
+        rng = np.random.RandomState(DOWNSAMPLE_SEED)
+        maj_down = rng.choice(maj, size=len(minr), replace=False)
+
+        # new balanced train_indices
+        train_indices = list(minr) + list(maj_down)
+        random.shuffle(train_indices)
+
+        # report new skew
+        train_pos = [i for i in train_indices if labels_by_idx[i] == 1]
+        train_neg = [i for i in train_indices if labels_by_idx[i] == 0]
+        print(f"Skew (train) AFTER downsample:  pos={len(train_pos)} neg={len(train_neg)}")
+    else:
+        print("Warning: one of the classes is empty in train; skipping downsample.") """
+    #############################################################
+    #############################################################
     
     assert set(train_indices).isdisjoint(val_indices), "Train/Val overlap!"
     assert set(train_indices).isdisjoint(test_indices), "Train/Test overlap!"
@@ -114,7 +155,7 @@ def main():
     
     # Class weights from TRAIN only (positives = hallucinations)
     train_labels = [labels_by_idx[i] for i in train_indices]
-    pos = sum(train_labels)                 # count hallucinations (1s)
+    pos = sum(train_labels) # count hallucinations
     neg = len(train_labels) - pos
     if pos == 0:
         raise SystemExit("No positive examples (hallucinations) in train split; cannot compute pos_weight.")
@@ -227,7 +268,7 @@ def main():
     # 2) Guard against one-class thresholds
     if one_class(best_thr, pva_arr):
         prec, rec, thr_pr = precision_recall_curve(yva_arr, pva_arr)
-        dif = np.abs(prec - rec[:-1])
+        dif = np.abs(prec[:-1] - rec[:-1])
         best_thr = float(thr_pr[int(np.argmin(dif))])
         if one_class(best_thr, pva_arr):
             q = 1.0 - float(yva_arr.mean())  # prevalence-matching
@@ -315,6 +356,8 @@ def main():
     with open(metrics_path, "w") as f:
         json.dump(metrics, f, indent=2)
     print(f"Saved metrics: {metrics_path}")
+    
+    return val_auc, te_auc
 
 if __name__ == "__main__":
     main()

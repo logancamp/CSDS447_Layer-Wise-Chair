@@ -5,10 +5,10 @@ __pycache__/
 .DS_Store
 *.sif
 *.venv
-outputs/
-*.json
-*.jsonl
-*.csv
-*.pkl
-*.pth
+# outputs/
+# *.json
+# *.jsonl
+# *.csv
+# *.pkl
+# *.pth
 README.md

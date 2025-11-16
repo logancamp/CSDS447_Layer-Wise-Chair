@@ -33,10 +33,10 @@ def main():
     args = ap.parse_args()
     
     # --- seeds ---
-    SPLIT_SEED = 23        # CV folds inside LogisticRegressionCV
-    MODEL_SEED = 999        # LR(SAGA) stochastic parts
-    SMOTE_BASE = 42        # only if you re-enable SMOTE section
-    DOWNSAMPLE_SEED = 0   # manual downsampling reproducibility
+    MODEL_SEED = 1            # LR: 1 1b, 242 8b, 1 q4bi, 1 4bt, 1 q8bi, 1 m8b
+    SPLIT_SEED = 23
+    SMOTE_BASE = 42
+    DOWNSAMPLE_SEED = 323       # NN | model: 323 1b, 7 8b, 283 q4bi, 451 4bt, 449 q8bi, 421 m8b
 
     # Load features
     """
@@ -70,7 +70,7 @@ def main():
     #############################################################
     #############################################################
     # Define pipeline with SMOTE and logistic regression
-    pipe = Pipeline([
+    """ pipe = Pipeline([
         ("imputer", SimpleImputer(strategy="median")),
         ("vth", VarianceThreshold(threshold=1e-6)),
         ("scaler", StandardScaler(with_mean=True, with_std=True)),
@@ -79,32 +79,27 @@ def main():
             penalty="elasticnet", 
             solver="saga", 
             l1_ratio=0.5,
-            max_iter=20000
+            max_iter=20000,
+            random_state=MODEL_SEED
         )),
     ])
 
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=SPLIT_SEED)
     scoring = make_scorer(average_precision_score, response_method="predict_proba")
-    param_grid = [ #choose the better of smote of no smote
-        {
-            "smote": [SMOTE(random_state=SMOTE_BASE)],
-            "smote__sampling_strategy": [0.5, 0.7, 0.9, 1.0],
-            "smote__k_neighbors": [3, 5],
-            "clf__C": np.logspace(-4, -1, 5).tolist(),
-            "clf__l1_ratio": [0.5, 1.0],
-            "clf__class_weight": [None, "balanced"],
-        },
-        {
-            "smote": ["passthrough"],
-            "clf__C": np.logspace(-4, -1, 5).tolist(),
-            "clf__l1_ratio": [0.5, 1.0],
-            "clf__class_weight": [None, "balanced"],
-        },
-    ]
-    gs = GridSearchCV(pipe, param_grid, cv=cv, scoring=scoring, n_jobs=-1, refit=True)
+    param_grid = {
+        "smote": [SMOTE(random_state=SMOTE_BASE)],
+        "smote__sampling_strategy": [0.5, 0.7, 0.9, 1.0],
+        "smote__k_neighbors": [3, 5],
+        "clf__C": np.logspace(-4, -1, 5).tolist(),
+        "clf__l1_ratio": [0.5, 1.0],
+        "clf__class_weight": [None, "balanced"],
+    }
+
+    gs = GridSearchCV(pipe, param_grid, cv=cv, scoring=scoring, n_jobs=-1, refit=True) """
+    
     #############################################################
     # Train logistic regression with standard scaling
-    """ pipe = Pipeline([
+    pipe = Pipeline([
         ("imputer", SimpleImputer(strategy="median")),
         ("vth", VarianceThreshold(threshold=1e-6)),
         ("scaler", StandardScaler(with_mean=True, with_std=True)),
@@ -121,12 +116,8 @@ def main():
             refit=True,
             random_state=MODEL_SEED
         ))
-    ]) """
-    #############################################################
-    
-    # Set class weights manually before
-    # pipe.named_steps["clf"].class_weight = {0: len(ytr)/sum(np.array(ytr)==0), 1: len(ytr)/sum(np.array(ytr)==1)}  
-    
+    ])
+    ############################################################# 
     # Downsample majority class in TRAIN only
     """ from sklearn.utils import resample
     print(f"Skew test: {train_df.y.value_counts()}")
@@ -141,18 +132,18 @@ def main():
         train_df = pd.concat([maj, minr_down], ignore_index=True)
         
     Xtr = train_df[feature_cols].values.tolist()
-    ytr = train_df["y"].astype(int).values.tolist() """
+    ytr = train_df["y"].astype(int).values.tolist()  """
     
-    # Set class weights manually after
-    # pipe.named_steps["clf"].class_weight = {0: len(ytr)/sum(np.array(ytr)==0), 1: len(ytr)/sum(np.array(ytr)==1)}  
     #############################################################
-        
+    # Set class weights manually (test on all)
+    """ pipe.named_steps["clf"].class_weight = {0: len(ytr)/sum(np.array(ytr)==0), 1: len(ytr)/sum(np.array(ytr)==1)} """
+    
     # for simple pipeline
-    # pipe.fit(Xtr, ytr)
+    pipe.fit(Xtr, ytr)
     
     # for grid search pipeline with smote
-    gs.fit(Xtr, ytr)
-    pipe = gs.best_estimator_
+    """ gs.fit(Xtr, ytr)
+    pipe = gs.best_estimator_ """
     
     #############################################################
     #############################################################
@@ -214,6 +205,7 @@ def main():
     with open(metrics_path, "w") as f:
         json.dump(metrics, f, indent=2)
     print(f"Saved metrics: {metrics_path}")
-
+    
+    
 if __name__ == "__main__":
     main()

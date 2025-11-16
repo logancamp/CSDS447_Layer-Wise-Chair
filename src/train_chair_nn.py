@@ -357,7 +357,6 @@ def main():
         json.dump(metrics, f, indent=2)
     print(f"Saved metrics: {metrics_path}")
     
-    return val_auc, te_auc
-
+    
 if __name__ == "__main__":
     main()

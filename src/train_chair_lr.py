@@ -33,7 +33,7 @@ def main():
     args = ap.parse_args()
     
     # --- seeds ---
-    MODEL_SEED = 1            # LR: 1 1b, 242 8b, 1 q4bi, 1 4bt, 1 q8bi, 1 m8b
+    MODEL_SEED = 1              # LR        : 1 1b, 242 8b, 1 q4bi, 1 4bt, 1 q8bi, 1 m8b
     SPLIT_SEED = 23
     SMOTE_BASE = 42
     DOWNSAMPLE_SEED = 323       # NN | model: 323 1b, 7 8b, 283 q4bi, 451 4bt, 449 q8bi, 421 m8b

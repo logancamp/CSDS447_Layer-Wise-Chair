@@ -114,13 +114,13 @@ def main():
     # Configure hyperparameters
     args = fetch_args()
     
-    # model = "meta-llama/Meta-Llama-3-8B-Instruct"
+    model = "meta-llama/Meta-Llama-3-8B-Instruct"
     # model = "meta-llama/Llama-3.2-1B-Instruct"
     
     # model = "Qwen/Qwen3-4B-Instruct-2507"
     # model = "Qwen/Qwen3-4B-Thinking-2507"
     # model = "Qwen/Qwen3-8B"
-    model = "mistralai/Ministral-8B-Instruct-2410"
+    # model = "mistralai/Ministral-8B-Instruct-2410"
     
     max_new_tokens = 32
 

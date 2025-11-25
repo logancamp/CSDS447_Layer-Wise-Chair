@@ -1,0 +1,23 @@
+{
+  "timestamp": "20251109-213540",
+  "dataset": "truthful_qa:multiple_choice",
+  "n_total": 817,
+  "overall_accuracy": 0.28518971848225216,
+  "per_split": {
+    "train": {
+      "n": 593,
+      "accuracy": 0.28161888701517707
+    },
+    "val": {
+      "n": 151,
+      "accuracy": 0.2781456953642384
+    },
+    "test": {
+      "n": 73,
+      "accuracy": 0.3287671232876712
+    }
+  },
+  "model": "mistralai/Ministral-8B-Instruct-2410",
+  "outname": "mc1_results",
+  "predictions_file": "outputs/mc1_results.jsonl"
+}

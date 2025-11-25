@@ -1,0 +1,23 @@
+{
+  "timestamp": "20251116-132242",
+  "dataset": "truthful_qa:multiple_choice",
+  "n_total": 817,
+  "overall_accuracy": 0.2582619339045288,
+  "per_split": {
+    "train": {
+      "n": 593,
+      "accuracy": 0.27318718381112983
+    },
+    "val": {
+      "n": 151,
+      "accuracy": 0.2251655629139073
+    },
+    "test": {
+      "n": 73,
+      "accuracy": 0.2054794520547945
+    }
+  },
+  "model": "meta-llama/Llama-3.2-1B-Instruct",
+  "outname": "mc1_results",
+  "predictions_file": "outputs/mc1_results.jsonl"
+}

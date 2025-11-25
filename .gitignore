@@ -5,9 +5,9 @@ __pycache__/
 .DS_Store
 *.sif
 *.venv
-outputs/
-*.json
-*.jsonl
+# outputs/
+# *.json
+# *.jsonl
 *.csv
 *.pkl
 *.pth

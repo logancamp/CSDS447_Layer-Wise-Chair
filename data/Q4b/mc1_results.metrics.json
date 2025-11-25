@@ -1,0 +1,23 @@
+{
+  "timestamp": "20251107-100435",
+  "dataset": "truthful_qa:multiple_choice",
+  "n_total": 817,
+  "overall_accuracy": 0.32558139534883723,
+  "per_split": {
+    "train": {
+      "n": 593,
+      "accuracy": 0.342327150084317
+    },
+    "val": {
+      "n": 151,
+      "accuracy": 0.2781456953642384
+    },
+    "test": {
+      "n": 73,
+      "accuracy": 0.2876712328767123
+    }
+  },
+  "model": "Qwen/Qwen3-4B-Instruct-2507",
+  "outname": "mc1_results",
+  "predictions_file": "outputs/mc1_results.jsonl"
+}

@@ -46,8 +46,8 @@ def main():
     args = fetch_args()
     
     # --- seeds ---
-    MODEL_SEED = 49            # NN        : 49 1b, 376 8b, 284 q4bi, 437 4bt, 413 q8bi, 111 m8b
-    DOWNSAMPLE_SEED = 404      # NN | model: 404 1b, 253 8b, 67 q4bi, 100 4bt, 170 q8bi, 76 m8b
+    MODEL_SEED = 42            # NN        : 49 1b, 376 8b, 284 q4bi, 437 4bt, 413 q8bi, 111 m8b
+    DOWNSAMPLE_SEED = 213      # NN | model: 404 1b, 253 8b, 67 q4bi, 100 4bt, 170 q8bi, 76 m8b
     
     # set global seeds for reproducibility
     torch.manual_seed(MODEL_SEED)
@@ -98,7 +98,7 @@ def main():
     #############################################################
     #############################################################
     # --- Downsample majority class in TRAIN only (by indices) ---
-    """ train_pos = [i for i in train_indices if labels_by_idx[i] == 1]  # hallucinations
+    train_pos = [i for i in train_indices if labels_by_idx[i] == 1]  # hallucinations
     train_neg = [i for i in train_indices if labels_by_idx[i] == 0]  # correct
     print(f"Skew (train) BEFORE downsample: pos={len(train_pos)} neg={len(train_neg)}")
 
@@ -121,7 +121,7 @@ def main():
         train_neg = [i for i in train_indices if labels_by_idx[i] == 0]
         print(f"Skew (train) AFTER downsample:  pos={len(train_pos)} neg={len(train_neg)}")
     else:
-        print("Warning: one of the classes is empty in train; skipping downsample.") """
+        print("Warning: one of the classes is empty in train; skipping downsample.")
     #############################################################
     #############################################################
     
@@ -167,6 +167,11 @@ def main():
     best_val_auc = -1.0
     start_time = time.time()
 
+    # Early stopping configuration
+    patience = 3
+    no_improve = 0
+    min_improve = 1e-4
+
     for epoch in range(args.epochs):
         model.train()
         total_train_loss = 0
@@ -183,7 +188,7 @@ def main():
 
         avg_train_loss = total_train_loss / len(train_loader)
 
-        # --- Validation Loop ---
+        # --- Validation ---
         model.eval()
         total_val_loss = 0
         all_labels = []
@@ -197,22 +202,26 @@ def main():
                 loss = criterion(logits, labels)
                 total_val_loss += loss.item()
                 
-                p_hall = torch.sigmoid(logits)  # P(hallucination)
-                all_labels.extend(labels.cpu().numpy().astype(int))  # labels already 1=hallucination
+                p_hall = torch.sigmoid(logits)
+                all_labels.extend(labels.cpu().numpy().astype(int))
                 all_probs.extend(p_hall.cpu().numpy())
 
         avg_val_loss = total_val_loss / len(val_loader)
         
-        # Calculate validation metrics
         val_auc = roc_auc_score(all_labels, all_probs)
         val_ap = average_precision_score(all_labels, all_probs)
         val_f1 = f1_score(all_labels, (np.array(all_probs) >= 0.5).astype(int))
 
-        print(f"Epoch {epoch+1:2}/{args.epochs} | Train Loss: {avg_train_loss:7.4f} | Val Loss: {avg_val_loss:7.4f} | "
-              f"Val AUC: {val_auc:.4f} | Val AP: {val_ap:.4f} | Val F1: {val_f1:.4f}")
+        print(
+            f"Epoch {epoch+1:2}/{args.epochs} | "
+            f"Train Loss: {avg_train_loss:7.4f} | Val Loss: {avg_val_loss:7.4f} | "
+            f"Val AUC: {val_auc:.4f} | Val AP: {val_ap:.4f} | Val F1: {val_f1:.4f}"
+        )
 
-        if val_auc > best_val_auc:
+        # Early stopping logic
+        if val_auc > best_val_auc + min_improve:
             best_val_auc = val_auc
+            no_improve = 0
             print(f"  -> New best model saved to {args.out} (AUC: {val_auc:.4f})")
             torch.save({
                 'state_dict': model.state_dict(),
@@ -224,6 +233,12 @@ def main():
                     'num_layers': args.num_layers
                 }
             }, args.out)
+        else:
+            no_improve += 1
+            print(f"  -> No improvement for {no_improve} epoch(s).")
+            if no_improve >= patience:
+                print(f"Early stopping at epoch {epoch+1} (no AUC gain for {patience} epochs).")
+                break
 
     print(f"\nTraining finished in {time.time() - start_time:.2f} seconds.")
 

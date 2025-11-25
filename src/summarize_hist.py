@@ -78,18 +78,42 @@ def main():
     # Collect all tails we have summaries for
     tails_present = sorted({tail for (_, tail) in cols_by_key.keys()})
 
-    # Build last_* features from the effective last layer
-    for tail in tails_present:
-        ent_col = f"L{effective_last_layer}_ent_tail_{tail}"
-        lp_col = f"L{effective_last_layer}_lp_tail_{tail}"
+    # ----- Build / preserve last_* features -----
+    # k here is the *number of last layers omitted* (from args.omit_last_k_layers)
+    if args.omit_last_k_layers == 0:
+        # For k = 0, we want to reproduce the original features exactly.
+        # If the input already has last_* columns, just pass them through.
+        existing_last_cols = [c for c in df.columns if c.startswith("last_")]
+        if existing_last_cols:
+            for c in existing_last_cols:
+                out[c] = df[c]
+        else:
+            # Fallback: construct last_* from the true last layer if none exist.
+            for tail in tails_present:
+                ent_col = f"L{effective_last_layer}_ent_tail_{tail}"
+                lp_col = f"L{effective_last_layer}_lp_tail_{tail}"
 
-        if ent_col not in df.columns or lp_col not in df.columns:
-            raise ValueError(
-                f"Missing {ent_col} or {lp_col} in input CSV; cannot build offset last-layer features."
-            )
+                if ent_col not in df.columns or lp_col not in df.columns:
+                    raise ValueError(
+                        f"Missing {ent_col} or {lp_col} in input CSV; cannot build last-layer features."
+                    )
 
-        out[f"last_ent_tail_{tail}"] = df[ent_col]
-        out[f"last_lp_tail_{tail}"] = df[lp_col]
+                out[f"last_ent_tail_{tail}"] = df[ent_col]
+                out[f"last_lp_tail_{tail}"] = df[lp_col]
+    else:
+        # For k > 0, intentionally redefine "last_*" to mean the highest
+        # *included* layer after omitting the top k layers.
+        for tail in tails_present:
+            ent_col = f"L{effective_last_layer}_ent_tail_{tail}"
+            lp_col = f"L{effective_last_layer}_lp_tail_{tail}"
+
+            if ent_col not in df.columns or lp_col not in df.columns:
+                raise ValueError(
+                    f"Missing {ent_col} or {lp_col} in input CSV; cannot build offset last-layer features."
+                )
+
+            out[f"last_ent_tail_{tail}"] = df[ent_col]
+            out[f"last_lp_tail_{tail}"] = df[lp_col]
 
     # Build cross-layer summaries using the SAME util funcs as eval (summarize_*).
     for (metric, tail), LC in cols_by_key.items():

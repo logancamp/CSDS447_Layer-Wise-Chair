@@ -66,8 +66,30 @@ def create_chair_from_features(df: pd.DataFrame, out_dir: str, tails=None):
             out["split"] = "train"
 
         out["y"] = df[label_col]
-        fname = f"chair_features.csv"
 
+        # enforce canonical column order:
+        #   core CHAIR features first,
+        #   then all other features sorted,
+        #   then metadata (qid, split, y) at the end.
+        core_cols = ["lp", "ent", "lp_norm", "ent_norm"]
+
+        meta_end = []
+        if "qid" in out.columns:
+            meta_end.append("qid")
+        if "split" in out.columns:
+            meta_end.append("split")
+        if "y" in out.columns:
+            meta_end.append("y")
+
+        middle = sorted(
+            c for c in out.columns
+            if c not in set(core_cols + meta_end)
+        )
+
+        ordered_cols = [c for c in core_cols if c in out.columns] + middle + meta_end
+        out = out[ordered_cols]
+
+        fname = f"chair_features.csv"
         out_path = os.path.join(out_dir, fname)
         out.to_csv(out_path, index=False)
         print(f"[ok] wrote {out_path}")

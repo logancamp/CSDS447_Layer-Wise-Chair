@@ -39,16 +39,6 @@ def main():
     DOWNSAMPLE_SEED = 323       # NN | model: 323 1b, 7 8b, 283 q4bi, 451 4bt, 449 q8bi, 421 m8b
 
     # Load features
-    """
-    TODO: 
-        abstract this reading step to a common util function and include the path to the layer data and the final layer cap, 
-        in this function if final layer == "all" format the same, just import features like this, 
-        otherwise cut off features at the cap layer and adjust the final layer logprobs and entropies from the 
-        featurize_hist output. 
-        Note: format the hist final layer the same as featurize.py file does for last layer
-              Look at features for formatting, and featurize_hist for full layer hist formats:
-                last_lp_tail_{i} and last_ent_tail_{i} per token
-    """ 
     df = pd.read_csv(args.features)
     df = df.replace([np.inf, -np.inf], np.nan)
 
@@ -117,9 +107,10 @@ def main():
             random_state=MODEL_SEED
         ))
     ])
+    
     ############################################################# 
     # Downsample majority class in TRAIN only
-    """ from sklearn.utils import resample
+    from sklearn.utils import resample
     print(f"Skew test: {train_df.y.value_counts()}")
     maj = train_df[train_df.y == 1]
     minr = train_df[train_df.y == 0]
@@ -132,11 +123,11 @@ def main():
         train_df = pd.concat([maj, minr_down], ignore_index=True)
         
     Xtr = train_df[feature_cols].values.tolist()
-    ytr = train_df["y"].astype(int).values.tolist()  """
+    ytr = train_df["y"].astype(int).values.tolist() 
     
     #############################################################
     # Set class weights manually (test on all)
-    """ pipe.named_steps["clf"].class_weight = {0: len(ytr)/sum(np.array(ytr)==0), 1: len(ytr)/sum(np.array(ytr)==1)} """
+    pipe.named_steps["clf"].class_weight = {0: len(ytr)/sum(np.array(ytr)==0), 1: len(ytr)/sum(np.array(ytr)==1)}
     
     # for simple pipeline
     pipe.fit(Xtr, ytr)

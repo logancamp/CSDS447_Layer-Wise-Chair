@@ -10,7 +10,7 @@ from chair_model import CHAIRModel
 import pandas as pd
 from torch.utils.data import TensorDataset
 from sklearn.metrics import (
-    roc_auc_score, average_precision_score, accuracy_score, f1_score
+    roc_auc_score, average_precision_score, accuracy_score, f1_score, precision_score, recall_score
 )
 
 def fetch_args():
@@ -54,22 +54,47 @@ def main():
         model.to(device)
         model.eval()
         print(f"Model loaded from {args.model_pth}")
+        
+        # --- Load best threshold from training metrics (if available) ---
+        metrics_json_path = Path(args.model_pth).with_suffix(".metrics.json")
+        try:
+            with open(metrics_json_path, "r") as f:
+                metrics_json = json.load(f)
+            best_thr = float(metrics_json.get("threshold", 0.5))
+            print(f"Loaded threshold from metrics: best_thr={best_thr:.4f}")
+        except FileNotFoundError:
+            best_thr = 0.5
+            print(f"Warning: {metrics_json_path} not found; defaulting best_thr=0.5")
+        except Exception as e:
+            best_thr = 0.5
+            print(f"Warning: error loading {metrics_json_path} ({e}); defaulting best_thr=0.5")
     
     except Exception as e:
         print(f"Error loading model: {e}")
         sys.exit(1)
 
     # --- Load Prediction Data from CSV ---
+    # --- Load Prediction Data from CSV (TEST split only) ---
+    if "split" not in cdf.columns:
+        raise SystemExit("Expected a 'split' column in features CSV.")
+
+    test_mask = cdf["split"].astype(str) == "test"
+    test_cdf = cdf[test_mask].reset_index(drop=True)
+
+    if test_cdf.empty:
+        raise SystemExit("No rows with split == 'test' found in features CSV.")
+
     X = torch.tensor(
-        cdf[scalar_feature_names]
+        test_cdf[scalar_feature_names]
         .apply(pd.to_numeric, errors="coerce")
         .replace([np.inf, -np.inf], np.nan)
         .fillna(0.0)
         .to_numpy(dtype=np.float32, copy=False)
     )
-    y = torch.tensor(cdf["y"].astype(int).values, dtype=torch.float32)
+    y = torch.tensor(test_cdf["y"].astype(int).values, dtype=torch.float32)
+
     lp = torch.zeros((X.size(0), K), dtype=torch.float32)   # dummy logprob seq
-    ent = torch.zeros((X.size(0), K), dtype=torch.float32)   # dummy entropy seq
+    ent = torch.zeros((X.size(0), K), dtype=torch.float32)  # dummy entropy seq
     dataset = TensorDataset(X, lp, ent, y)
 
     pred_loader = DataLoader(
@@ -94,7 +119,7 @@ def main():
 
     y_score = np.array(all_scores)
     y_true = np.array(y_true)
-    y_pred = (y_score >= 0.5).astype(int) # Get binary predictions
+    y_pred = (y_score >= best_thr).astype(int) # Get binary predictions
 
     # --- Calculate and Save Metrics ---
     metrics = {
@@ -103,6 +128,8 @@ def main():
         "auc": float(roc_auc_score(y_true, y_score)),
         "avg_precision": float(average_precision_score(y_true, y_score)),
         "accuracy": float(accuracy_score(y_true, y_pred)),
+        "precision": float(precision_score(y_true, y_pred, zero_division=0)),
+        "recall": float(recall_score(y_true, y_pred, zero_division=0)),
         "f1": float(f1_score(y_true, y_pred)),
     }
     
@@ -128,7 +155,7 @@ def main():
     else:
         by_qid = None
 
-    thr = 0.5  # Fixed threshold for binary classification - temp
+    thr = best_thr  # Use same tuned threshold as in training
     scores_csv = args.features.replace(".features", ".nn_chair_scores.csv")
     with open(scores_csv, "w", newline="", encoding="utf-8") as f_out:
         w = csv.writer(f_out)

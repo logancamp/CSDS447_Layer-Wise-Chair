@@ -80,6 +80,7 @@ Where does this error occur in my implimentation? <br>
 <br><br><br>
 
 # Get Started (BASH):
+Note: make sure to add the 2 json files from data into the outputs folder before running: output/mc1_results.json and output/mc1_results.metrics.json. You can also add the two feature csv's but thesse will be computed for you upon running.
 ## 0) Setup Dependencies
 `sudo singularity build singularity.sif container.def`
 

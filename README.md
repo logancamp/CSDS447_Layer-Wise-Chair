@@ -29,7 +29,7 @@ Are we able to detect these hallucinations earlier rather than only in the last 
 <br><br>
 
 ## Architecture:
-- 70/20/10 split training/validation/test data
+- 80/10/10 split training/validation/test data
 - Training data consists of across layer summary stats + last layer token logprobs and entropy summaries
 - Cross-layer stats include: mean, max, min, standar deviation, and slope
 - Simple logistic regression and attention network options currently exist for analysis
